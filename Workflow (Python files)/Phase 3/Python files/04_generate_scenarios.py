@@ -1,53 +1,14 @@
-# 04_generate_scenarios.py
-"""
-Generate the PM2.5 scenarios that Phases 4-5 optimise and test sensor
-networks against.
-
-For each of Phase 2's selected days (63 per city: train and 2025 test),
-the calibrated transport model is run with that day's real hourly weather
-(24 h spin-up on the previous day's weather, as in calibration) for
-1 + N_SYNTHETIC emission scenarios ("members"):
-
-    member 0      BASE: calibrated emissions, alpha x population
-    member 1..N   SYNTHETIC: same expected total, redistributed into
-                  lognormal-perturbed area sources + Poisson point sources
-                  on land (see config.py for the parameters and rationale)
-
-Total PM2.5 = local contribution (from emissions) + b_d x background
-response, with b_d that day's calibrated background (03_calibrate.py).
-The background is spatially uniform when the calibrated loss rate is zero,
-so all spatial structure comes from the local contribution. Both terms are
-saved, so later phases can use either.
-
-Every member and every day uses its own seeded random stream, so any
-single scenario can be regenerated on its own.
-
-Output (data/processed/phase3/<city>/<city>_scenarios.nc):
-    pm25        (day, member, hour, cell)  total PM2.5 at candidate cells, ug/m3
-    local_pm25  (day, member, hour, cell)  emission-driven part only
-    emission    (day, member, y, x)        emission rate per domain cell, ug/s
-    background  (day)                      calibrated b_d, ug/m3
-    plus per-day date / regime / split / selection / w_k and per-cell id, x, y.
-
-Usage:
-    python 04_generate_scenarios.py --all
-"""
-
 import argparse
 import json
-
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import xarray as xr
-
 import config
 import transport
-
 SPINUP_HOURS = 24
-
 
 def parse_cities(description):
     parser = argparse.ArgumentParser(description=description)
@@ -57,12 +18,10 @@ def parse_cities(description):
     args = parser.parse_args()
     return config.ALL_CITIES if args.all else [args.city]
 
-
 def synthetic_emissions(base, land, rng):
     """One synthetic emission field (ug/s per cell) with base's expected total."""
     s = config.SYNTH_AREA_SIGMA
     area = (1 - config.SYNTH_POINT_SHARE) * base * rng.lognormal(-s**2 / 2, s, base.shape)
-
     rows, cols = np.nonzero(land)
     n_pts = rng.poisson(config.SYNTH_POINT_MEAN_COUNT)
     pick = rng.integers(0, len(rows), n_pts)
@@ -72,7 +31,6 @@ def synthetic_emissions(base, land, rng):
     points = np.zeros_like(base)
     np.add.at(points, (rows[pick], cols[pick]), mags)
     return area + points, n_pts
-
 
 def generate(city):
     print(f"=== {city}")
@@ -89,7 +47,6 @@ def generate(city):
 
     cand = pd.read_csv(pdir / f"{city}_candidates.csv")
     cells = (cand["domain_row"].to_numpy(), cand["domain_col"].to_numpy())
-
     dx = domain.attrs["cell_size_m"]
     pop = domain["population"].values
     land = domain["land"].values.astype(bool)
@@ -112,8 +69,6 @@ def generate(city):
             rng = np.random.default_rng([config.RANDOM_SEED, d, m])
             emis[m], n_points[d, m] = synthetic_emissions(base, land, rng)
         emission[d] = emis
-
-        # Tracers: one per member (emissions, no background) + one unit background.
         flux = np.concatenate([emis, np.zeros((1, ny, nx))]) / dx**2   # ug m-2 s-1
         bgv = np.r_[np.zeros(n_mem), 1.0]
         c0 = bgv[:, None, None] * np.ones((1, ny, nx))
@@ -125,7 +80,7 @@ def generate(city):
         fields = transport.met_to_domain(met, domain)
         r = transport.run(fields, dx, flux, np.full(n_mem + 1, lam), K, bgv, c0,
                           sample_cells=cells)
-        s = r["samples"][SPINUP_HOURS:]                 # (H, n_mem + 1, C)
+        s = r["samples"][SPINUP_HOURS:]                 
         local[d] = s[:, :n_mem].transpose(1, 0, 2)
         bg_resp[d] = s[:, n_mem]
         print(f"  {d + 1}/{D} {row['date'].date()} {row['regime']}", end="\r", flush=True)
