@@ -1,18 +1,3 @@
-# run_phase2.py
-"""
-Run Phase 2 end to end.
-
-The pipeline deliberately stops after script 05 the first time, because
-choosing k requires you to LOOK at the diagnostics. Once final_k is set in
-config.py for every city, re-run and it continues through to Phase 3 data.
-
-Usage:
-    python run_phase2.py                  # stages 02-11, all cities
-    python run_phase2.py --from 04        # resume from stage 04
-    python run_phase2.py --only 07        # single stage
-    python run_phase2.py --city melbourne
-"""
-
 import argparse
 import subprocess
 import sys
@@ -20,9 +5,7 @@ from pathlib import Path
 
 import config
 
-
 HERE = Path(__file__).resolve().parent
-
 
 STAGES = [
     ("02", "02_preprocess_hourly.py", True),
@@ -31,8 +14,6 @@ STAGES = [
     ("05", "05_cluster_sweep.py", False),
     ("06", "06_fit_final_clusters.py", False),
     ("07", "07_characterize_regimes.py", False),
-    # 09 runs BEFORE 08: day sampling is stratified by split, so the
-    # split assignment has to exist first.
     ("09", "09_split_train_test.py", False),
     ("08", "08_select_days.py", False),
     ("10", "10_build_phase3_days.py", False),
@@ -50,8 +31,7 @@ def run(script, city_args):
 
     if result.returncode != 0:
         raise SystemExit(
-            f"\nStage {script} failed with code {result.returncode}. "
-            f"Fix it before continuing."
+            f"\nThis stuff does NOT Work. "
         )
 
 
