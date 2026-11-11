@@ -1,33 +1,13 @@
-# 11_extract_phase3_data.py
-"""
-Write one NetCDF file per selected day, containing the 24 hourly wind and
-boundary-layer fields that Phase 3's advection-diffusion model will use.
-
-Local day boundaries are converted back to UTC using the SAME helper that
-script 04 used to build the features, so the day you simulate is exactly
-the day you clustered. (Previously this logic was duplicated inline in two
-scripts, which is how these drift apart.)
-
-Also writes phase3_manifest.csv, mapping each output file to its regime,
-split and w_k, so Phase 3 can iterate without re-deriving anything.
-
-Usage:
-    python 11_extract_phase3_data.py --all
-"""
-
 import pandas as pd
 import xarray as xr
-
 import config
 import utils
 
-
 EXTRACT_VARS = ["u10", "v10", "blh"]
-
 
 def extract(city):
 
-    utils.banner(f"EXTRACT PHASE 3 DATA: {city}")
+    utils.banner(f"{city}")
 
     base = config.processed_dir(city)
 
@@ -35,7 +15,7 @@ def extract(city):
 
     if not manifest_path.exists():
         raise FileNotFoundError(
-            f"{manifest_path} not found; run 10_build_phase3_days.py first."
+            f"{manifest_path} is missing oops"
         )
 
     selected = pd.read_csv(manifest_path, parse_dates=["date"])
@@ -80,8 +60,6 @@ def extract(city):
 
         subset = day[EXTRACT_VARS]
 
-        # Record provenance inside the file itself so a stray NetCDF is
-        # never ambiguous later.
         subset.attrs.update(
             {
                 "city": city,
@@ -112,7 +90,7 @@ def extract(city):
 
     if not records:
         raise RuntimeError(
-            "No days were extracted. Check your date range and offsets."
+            "No days extracted."
         )
 
     out_manifest = pd.DataFrame(records)
@@ -136,7 +114,7 @@ def extract(city):
 
 def main():
 
-    cities = utils.parse_cities("Extract per-day fields for Phase 3.")
+    cities = utils.parse_cities("Extract P3 fields pls")
 
     for city in cities:
         extract(city)
