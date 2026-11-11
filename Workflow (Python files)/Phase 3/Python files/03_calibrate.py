@@ -1,54 +1,5 @@
-# 03_calibrate.py
-"""
-Calibrate the transport model against real hourly PM2.5.
-
-Per the agreed design this is NOT a spatial emissions inversion: there are
-far more cells than stations. Emissions are population x one scalar:
-
-    E(cell) = alpha * population(cell) / cell_area      alpha: ug s-1 person-1
-
-and the free parameters are
-    alpha    emission per person                     (global)
-    lam      first-order loss rate                   (global, grid search)
-    b_d      background concentration on day d       (one per day)
-
-Horizontal diffusivity K is FIXED at config.TRANSPORT_K_M2_S (CMAQ-based;
-see config.py): a free fit drove K to the top of any range offered,
-because the station networks can't identify it. Pass --k-grid to
-re-run that diagnostic search over K as well.
-
-b_d absorbs the regional / transboundary PM2.5 that local emissions can't
-explain (and that population can't predict). It is spatially uniform, so
-it carries no information about WHERE to place sensors: the spatial
-pattern comes entirely from alpha * transport.
-
-Because the model is linear in (alpha, b_d), each lam is fitted by
-non-negative least squares on train-split days. lam is the grid value
-with the lowest train RMSE. The 2025 holdout days are then scored with
-alpha, K and lam frozen. b_d is re-fitted per test day, because it is
-unknown in advance and is not the thing being validated. Skill is reported
-against a background-only model (alpha = 0, b_d per day), so the test is
-whether population-driven transport explains real variation beyond a flat
-background. The background-only model predicts a single constant per day
-(b_d), so it has no within-day correlation to report.
-
-Each simulated day is the 24 local hours of the Phase 2 date, preceded by
-a 24 h spin-up driven by the real previous-day weather, starting from the
-background.
-
-Outputs:
-    data/processed/phase3/<city>/<city>_calibration.json   frozen parameters + scores
-    outputs/phase3/<city>/calibration/grid_search.csv
-    outputs/phase3/<city>/calibration/daily_background.csv
-    outputs/phase3/<city>/calibration/obs_vs_model.png
-
-Usage:
-    python 03_calibrate.py --all
-"""
-
 import argparse
 import json
-
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -56,11 +7,10 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 from scipy.optimize import nnls
-
 import config
 import transport
 
-K_DIAGNOSTIC_GRID = [100.0, 300.0, 1000.0, 3000.0, 10000.0, 30000.0]   # m2 s-1, --k-grid only
+K_DIAGNOSTIC_GRID = [100.0, 300.0, 1000.0, 3000.0, 10000.0, 30000.0]   # m2 s-1 for k-grid only
 LAM_GRID_HOURS = [np.inf, 24.0, 12.0, 6.0, 3.0, 1.5]            # e-folding time, h
 SPINUP_HOURS = 24
 SECONDS_PER_YEAR = 365.25 * 86400
@@ -102,7 +52,6 @@ def simulate_days(city, domain, days, stations, offset_h, k_grid):
     lams = np.array([lam_per_second(h) for h in LAM_GRID_HOURS])
     nl = len(lams)
 
-    # Tracers: [unit emission for each lam] + [unit background for each lam]
     emis = np.zeros((2 * nl, ny, nx))
     emis[:nl] = pop / dx**2                      # alpha = 1 ug s-1 person-1
     bg = np.r_[np.zeros(nl), np.ones(nl)]
@@ -126,7 +75,6 @@ def simulate_days(city, domain, days, stations, offset_h, k_grid):
 
 
 def observations(city, days, stations):
-    """Observed hour-start PM2.5, shape (D, 24, nst), NaN where missing."""
     obs = pd.read_csv(config.processed_dir(city) / f"{city}_pm25_hourly.csv",
                       parse_dates=["time_local"])
     obs = obs[obs["station"].isin(stations["station"])]
@@ -140,11 +88,6 @@ def observations(city, days, stations):
 
 
 def fit(sim_e, sim_b, y, alpha=None):
-    """NNLS for alpha (unless given) and one background per day.
-
-    sim_e, sim_b: (D, 24, nst) unit-emission / unit-background responses.
-    Returns alpha, b (D,), prediction (D, 24, nst).
-    """
     D = y.shape[0]
     ok = np.isfinite(y)
     rows_day = np.broadcast_to(np.arange(D)[:, None, None], y.shape)[ok]
@@ -162,7 +105,6 @@ def fit(sim_e, sim_b, y, alpha=None):
 
 
 def background_only(y):
-    """Best single constant per day (least squares = the day's observed mean)."""
     return np.broadcast_to(np.nanmean(y, axis=(1, 2), keepdims=True), y.shape)
 
 
@@ -172,8 +114,6 @@ def scores(y, pred, within_day=True):
     out = {"rmse": float(np.sqrt(np.mean(err**2))), "bias": float(err.mean()),
            "n_obs": int(ok.sum())}
     if within_day:
-        # Within-day anomalies: remove each day's mean, so the score
-        # reflects hour-to-hour and station-to-station structure only.
         y_anom = y - np.nanmean(y, axis=(1, 2), keepdims=True)
         p_anom = pred - np.nanmean(np.where(ok, pred, np.nan), axis=(1, 2), keepdims=True)
         out["r_within_day"] = float(np.corrcoef(y_anom[ok], p_anom[ok])[0, 1])
@@ -202,8 +142,6 @@ def calibrate(city, k_grid):
             rows.append({"K_m2_s": K, "loss_efold_h": lam_h, "alpha": a, **s})
     grid = pd.DataFrame(rows)
     if len(k_grid) > 1:
-        # Diagnostic run: record the (K, lam) grid only; don't overwrite
-        # the calibration that downstream steps use.
         grid.to_csv(config.output_dir(city, "calibration") / "grid_search_K_diagnostic.csv",
                     index=False)
         print(grid.round(4).to_string(index=False))
@@ -217,9 +155,9 @@ def calibrate(city, k_grid):
     _, b_te, pred_te = fit(se[~is_train], sb[~is_train], y[~is_train], alpha=alpha)
     null_tr = background_only(y[is_train])
     null_te = background_only(y[~is_train])
-    # With lam = 0 the background tracer is exactly 1 everywhere, so the
-    # full model contains background-only as the case alpha = 0. Its train
-    # RMSE therefore can't be worse; if it is, the solver is broken.
+    # at lam = 0 the background tracer is 1 everywhere, so the model defines background-only 
+    # as the case alpha = 0. hence, its training RMSE cannot be worse
+    
     assert scores(y[is_train], pred_tr)["rmse"] <= scores(y[is_train], null_tr, False)["rmse"] + 1e-6, \
         "full model fits worse than background-only on train days"
 
