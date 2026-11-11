@@ -4,7 +4,7 @@ import pandas as pd
 import config
 import utils
 
-def build(city, include_representative):
+def build(city, incl_rep):
 
     utils.banner(f{"{city}")
 
@@ -27,11 +27,11 @@ def build(city, include_representative):
 
     frames = [sampled]
 
-    if include_representative:
+    if incl_rep:
 
-        rep_path = base / f"{city}_representative_days.csv"
+        reppath = base / f"{city}_representative_days.csv"
 
-        representatives = pd.read_csv(rep_path, parse_dates=["date"])
+        representatives = pd.read_csv(reppath, parse_dates=["date"])
 
         frames.append(
             representatives[

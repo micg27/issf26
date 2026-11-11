@@ -56,14 +56,14 @@ def _meta(dates, regimes, splits, w_k, M):
 
 
 def _pack(X, m):
-    n_in_regime = m.groupby("regime")["regime"].transform("size").to_numpy()
-    w = m["w_k"].to_numpy() / n_in_regime
+    ninregime = m.groupby("regime")["regime"].transform("size").to_numpy()
+    w = m["w_k"].to_numpy() / ninregime
     return {"X": X, "w": w / w.sum(), "meta": m.reset_index(drop=True)}
 
 
-def _load_extension(city, name, C, cell_ids, k_tag=""):
-    ext = xr.open_dataset(config.PHASE3_DIR / city / f"{city}_scenarios_{name}{k_tag}.nc")
-    assert np.array_equal(ext["cell_id"].values, cell_ids)
+def _load_extension(city, name, C, cellids, k_tag=""):
+    ext = xr.open_dataset(config.P3_DIR / city / f"{city}_scenarios_{name}{k_tag}.nc")
+    assert np.array_equal(ext["cell_id"].values, cellids)
     dd = ext["pm25_daily"].values
     De, Me, _ = dd.shape
     m = _meta(ext["date"].values, ext["regime"].values, ext["split"].values,
@@ -71,7 +71,7 @@ def _load_extension(city, name, C, cell_ids, k_tag=""):
     return _pack(dd.reshape(De * Me, C).astype(float), m)
 
 
-def load_maps(city, test_set="selected", train_set="selected", k_tag=""):
+def load_maps(city, testset="selected", trainset="selected", k_tag=""):
     """Daily-mean maps and regime weights, split into train and test.
 
     test_set="selected" (pre-registered): the 18-19 test days Phase 2
@@ -82,9 +82,9 @@ def load_maps(city, test_set="selected", train_set="selected", k_tag=""):
     k_tag (Phase 8, e.g. "_K200"): read the extensions simulated at another K;
     needs test_set="all2025" and train_set="all".
     """
-    if k_tag and (test_set != "all2025" or train_set != "all"):
+    if k_tag and (testset != "all2025" or trainset != "all"):
         raise ValueError("Phase 8 K runs exist only for all training and all 2025 days")
-    ds = xr.open_dataset(config.PHASE3_DIR / city / f"{city}_scenarios.nc")
+    ds = xr.open_dataset(config.P3_DIR / city / f"{city}_scenarios.nc")
     daily = ds["pm25"].mean("hour").values                 # (day, member, cell)
     D, M, C = daily.shape
     meta = _meta(ds["date"].values, ds["regime"].values, ds["split"].values, ds["w_k"].values, M)
@@ -95,14 +95,14 @@ def load_maps(city, test_set="selected", train_set="selected", k_tag=""):
     for split in ("train", "test"):
         sel = (meta["split"] == split).to_numpy()
         out[split] = _pack(X[sel], meta[sel])
-    if test_set == "all2025":
+    if testset == "all2025":
         out["test"] = _load_extension(city, "2025_all", C, ds["cell_id"].values, k_tag)
-    elif test_set != "selected":
-        raise ValueError(test_set)
-    if train_set == "all":
+    elif testset != "selected":
+        raise ValueError(testset)
+    if trainset == "all":
         out["train"] = _load_extension(city, "train_all", C, ds["cell_id"].values, k_tag)
-    elif train_set != "selected":
-        raise ValueError(train_set)
+    elif trainset != "selected":
+        raise ValueError(trainset)
     return out
 
 
@@ -139,8 +139,8 @@ def fit_variogram(cells, Sigma):
     g = 0.5 * (np.diag(Sigma)[:, None] + np.diag(Sigma)[None, :] - 2 * Sigma)
     iu = np.triu_indices(len(xy), 1)
     d, g = d[iu], g[iu]
-    keep = d <= config.VARIOGRAM_MAX_DIST_FRACTION * d.max()
-    bins = np.floor(d[keep] / config.VARIOGRAM_BIN_M).astype(int)
+    keep = d <= config.VG_MAX_FRAC * d.max()
+    bins = np.floor(d[keep] / config.VG_BIN_M).astype(int)
     n = np.bincount(bins)
     ok = n > 0
     h = np.bincount(bins, d[keep])[ok] / n[ok]
@@ -168,13 +168,13 @@ def sensor_variance(vg, sigma2):
     return vg["nugget"] + sigma2 + 1e-9 * vg["sill"]      # tiny jitter for f = 0
 
 
-def ok_weights(K, S, extra_var):
+def ok_weights(K, S, extravar):
     """Ordinary kriging weights W (C, |S|), computed directly."""
     S = list(S)
     n = len(S)
     A = np.zeros((n + 1, n + 1))
     A[0, 1:] = A[1:, 0] = 1.0
-    A[1:, 1:] = K[np.ix_(S, S)] + extra_var * np.eye(n)
+    A[1:, 1:] = K[np.ix_(S, S)] + extravar * np.eye(n)
     R = np.column_stack([np.ones(K.shape[0]), K[:, S]])
     G = np.linalg.solve(A, R.T).T                       # A symmetric
     return G[:, 1:]
@@ -195,7 +195,7 @@ def ensemble_rmse(X, w, S, K, vg, sigma2):
 # STRATEGY 1: GREEDY RMSE MINIMISATION (S_met)
 # ---------------------------------------------------------
 
-def greedy_rmse(K, Sigma, vg, sigma2, n_max):
+def greedy_rmse(K, Sigma, vg, sigma2, nmax):
     """Forward greedy selection minimising the ensemble kriging MSE.
 
     Exact, but evaluates every candidate at every step with rank-one
@@ -223,9 +223,9 @@ def greedy_rmse(K, Sigma, vg, sigma2, n_max):
     G = np.column_stack([np.ones(C), K[:, first]]) @ Minv
     history = [float(mse1[first])]
 
-    available = np.ones(C, bool)
-    available[first] = False
-    while len(S) < n_max:
+    avail = np.ones(C, bool)
+    avail[first] = False
+    while len(S) < nmax:
         W = G[:, 1:]
         SigS = Sigma[:, S]                                   # (C, n)
         SigSS = Sigma[np.ix_(S, S)]
@@ -234,7 +234,7 @@ def greedy_rmse(K, Sigma, vg, sigma2, n_max):
         Q0 = np.sum(H * W)
         F0 = np.sum(W**2)
 
-        cand = np.nonzero(available)[0]
+        cand = np.nonzero(avail)[0]
         B = np.vstack([np.ones(len(cand)), K[np.ix_(S, cand)]])   # (n+1, Nc)
         U = Minv @ B
         s = diagK[cand] - np.sum(B * U, axis=0)
@@ -260,7 +260,7 @@ def greedy_rmse(K, Sigma, vg, sigma2, n_max):
         Minv = Mnew
         G = np.column_stack([G - np.outer(e, u) / sk, e / sk])
         S.append(int(c))
-        available[c] = False
+        avail[c] = False
         history.append(float(mse[k]))
     return S, history
 
@@ -285,19 +285,19 @@ def qr_network(modes, n):
     psi_c^T (Theta^T Theta)^-1 psi_c, which is the same volume-maximising
     criterion QR pivoting approximates.
     """
-    r = max(1, n // config.QR_OVERSAMPLING)
+    r = max(1, n // config.QR_OVERSAMPLE)
     Psi = modes[:, :r]
     _, _, piv = qr(Psi.T, pivoting=True, mode="economic")
     S = [int(i) for i in piv[:r]]
-    available = np.ones(Psi.shape[0], bool)
-    available[S] = False
+    avail = np.ones(Psi.shape[0], bool)
+    avail[S] = False
     while len(S) < n:
-        info_inv = np.linalg.inv(Psi[S].T @ Psi[S])
-        lev = np.einsum("ij,jk,ik->i", Psi, info_inv, Psi)
-        lev[~available] = -np.inf
+        infoinv = np.linalg.inv(Psi[S].T @ Psi[S])
+        lev = np.einsum("ij,jk,ik->i", Psi, infoinv, Psi)
+        lev[~avail] = -np.inf
         c = int(np.argmax(lev))
         S.append(c)
-        available[c] = False
+        avail[c] = False
     return S
 
 
@@ -306,7 +306,7 @@ def pod_rmse(X, w, S, modes, sigma2):
     constant plus r = N // QR_OVERSAMPLING POD modes. Used only as a check
     that QR isn't being judged unfairly by the shared kriging."""
     C = X.shape[1]
-    r = max(1, len(S) // config.QR_OVERSAMPLING)
+    r = max(1, len(S) // config.QR_OVERSAMPLE)
     B = np.column_stack([np.ones(C), modes[:, :r]])
     W = B @ np.linalg.pinv(B[S])
     mse = np.mean((X - X[:, S] @ W.T) ** 2, axis=1) + sigma2 * np.sum(W**2) / C
@@ -321,7 +321,7 @@ def kmeans_network(cells, n, seed):
     """Spatial coverage (Walvoort et al. 2010): k-means on cell coordinates,
     then the candidate cell nearest each cluster centre (no repeats)."""
     xy = cells[["x", "y"]].to_numpy()
-    km = KMeans(n_clusters=n, n_init=config.KMEANS_N_INIT, random_state=seed).fit(xy)
+    km = KMeans(n_clusters=n, n_init=config.KMEANS_INIT, random_state=seed).fit(xy)
     S = []
     for centre in km.cluster_centers_:
         order = np.argsort(np.hypot(*(xy - centre).T))

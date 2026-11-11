@@ -12,7 +12,7 @@ import importlib.util
 from pathlib import Path
 
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJ_ROOT = Path(__file__).resolve().parents[3]
 # config.py lives at <project_root>/Workflow/Phase 3/Python files/config.py
 
 
@@ -20,8 +20,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 # PHASE 2 CONFIG (imported, not duplicated)
 # ---------------------------------------------------------
 
-_p2_path = PROJECT_ROOT / "Workflow" / "Phase 2" / "Python files" / "config.py"
-_spec = importlib.util.spec_from_file_location("phase2_config", _p2_path)
+_p2path = PROJ_ROOT / "Workflow" / "Phase 2" / "Python files" / "config.py"
+_spec = importlib.util.spec_from_file_location("phase2_config", _p2path)
 phase2 = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(phase2)
 
@@ -30,24 +30,24 @@ _spec.loader.exec_module(phase2)
 # PATHS
 # ---------------------------------------------------------
 
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
+RAW_DIR = PROJ_ROOT / "data" / "raw"
 GRID_DIR = RAW_DIR / "grids"
 POP_DIR = RAW_DIR / "population"
-PM25_RAW_DIR = RAW_DIR / "pm25"
+PM_RAW_DIR = RAW_DIR / "pm25"
 
-PHASE2_DIR = phase2.PROCESSED_DIR          # data/processed/meteorology
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed" / "phase3"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "phase3"
+P2_DIR = phase2.PROC_DIR          # data/processed/meteorology
+PROC_DIR = PROJ_ROOT / "data" / "processed" / "phase3"
+OUTDIR = PROJ_ROOT / "outputs" / "phase3"
 
 
 def processed_dir(city=None):
-    d = PROCESSED_DIR / city if city else PROCESSED_DIR
+    d = PROC_DIR / city if city else PROC_DIR
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def output_dir(city, subfolder=None):
-    d = OUTPUT_DIR / city
+    d = OUTDIR / city
     if subfolder:
         d = d / subfolder
     d.mkdir(parents=True, exist_ok=True)
@@ -66,8 +66,8 @@ def output_dir(city, subfolder=None):
 # when it sits away from the cells we care about.
 # ---------------------------------------------------------
 
-CELL_SIZE_M = 2000
-DOMAIN_MARGIN_CELLS = 5        # 10 km
+CELL_SIZE = 2000
+MARGIN_CELLS = 5        # 10 km
 
 CITIES = {
     "singapore": {
@@ -121,7 +121,7 @@ def city_config(city):
 # as such in the methodology.
 # ---------------------------------------------------------
 
-SINGAPORE_REGIONS = {
+SG_REGIONS = {
     "north":   (1.41803, 103.82),
     "south":   (1.29587, 103.82),
     "east":    (1.35735, 103.94),
@@ -129,12 +129,12 @@ SINGAPORE_REGIONS = {
     "central": (1.35735, 103.82),
 }
 
-SINGAPORE_PM25_FILE = "Historical1hrPM2.5 (Singapore).csv"
-MELBOURNE_PM25_GLOB = "*_All_sites_air_quality_hourly_avg_*.xlsx"
+SG_PM_FILE = "Historical1hrPM2.5 (Singapore).csv"
+MEL_PM_GLOB = "*_All_sites_air_quality_hourly_avg_*.xlsx"
 
 # EPA Victoria's PM2.5 column name changes mid-record (see CLAUDE.md):
 # BPM2.5 = raw BAM reading, SBPM25 = same instrument, STP-corrected.
-MELBOURNE_PM25_COLUMNS = ["BPM2.5", "SBPM25"]
+MEL_PM_COLS = ["BPM2.5", "SBPM25"]
 
 # Plausibility bounds for hourly PM2.5 (ug/m3).
 # Small negative values are kept on purpose: 7.7% of Melbourne's hourly
@@ -168,8 +168,8 @@ PM25_MAX = 1000.0
 # bounds themselves are the Phase 8 sensitivity cases.
 # ---------------------------------------------------------
 
-TRANSPORT_K_M2_S = 1000.0
-TRANSPORT_K_SENSITIVITY_M2_S = [200.0, 8000.0]
+K_M2S = 1000.0
+K_SENS_M2S = [200.0, 8000.0]
 
 
 # ---------------------------------------------------------
@@ -192,9 +192,9 @@ TRANSPORT_K_SENSITIVITY_M2_S = [200.0, 8000.0]
 # Phase 8 sensitivity candidates.
 # ---------------------------------------------------------
 
-N_SYNTHETIC = 20
-SYNTH_AREA_SIGMA = 0.5
-SYNTH_POINT_MEAN_COUNT = 5
-SYNTH_POINT_SHARE = 0.3
-SYNTH_POINT_SIGMA = 1.0
-RANDOM_SEED = phase2.RANDOM_SEED
+N_SYNTH = 20
+SYN_AREA_SIG = 0.5
+SYN_PT_COUNT = 5
+SYN_PT_SHARE = 0.3
+SYN_PT_SIG = 1.0
+SEED = phase2.SEED

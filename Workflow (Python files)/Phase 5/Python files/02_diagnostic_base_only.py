@@ -33,8 +33,8 @@ from pathlib import Path
 
 import numpy as np
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-P4 = PROJECT_ROOT / "Workflow" / "Phase 4" / "Python files"
+PROJ_ROOT = Path(__file__).resolve().parents[3]
+P4 = PROJ_ROOT / "Workflow" / "Phase 4" / "Python files"
 sys.path.insert(0, str(P4))
 import networks as N  # noqa: E402
 
@@ -43,7 +43,7 @@ cfg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cfg)
 
 N_BOOT = 2000
-N_VALUES = {"singapore": [5, 8, 10, 15, 22, 30, 40],
+NVALS = {"singapore": [5, 8, 10, 15, 22, 30, 40],
             "melbourne": [5, 8, 10, 15, 22, 30, 40, 60, 88, 120, 160]}
 
 
@@ -56,21 +56,21 @@ def base_member(split):
 
 
 def run(city):
-    maps = N.load_maps(city, test_set="all2025", train_set="all")
+    maps = N.load_maps(city, testset="all2025", trainset="all")
     cells = maps["cells"]
     Xtr, wtr, _ = base_member(maps["train"])
     Xte, wte, mte = base_member(maps["test"])
     Sigma = N.second_moment(Xtr, wtr)
     vg = N.fit_variogram(cells, Sigma)
     K = N.covariance(cells, vg)
-    sd = cfg.HEADLINE_NOISE_FRACTION * N.spatial_sd(Xtr, wtr)
+    sd = cfg.MAIN_NOISE * N.spatial_sd(Xtr, wtr)
     order, _ = N.greedy_rmse(K, Sigma, vg, sd**2, cfg.N_MAX[city])
 
-    rng = np.random.default_rng([cfg.RANDOM_SEED, 52])
+    rng = np.random.default_rng([cfg.SEED, 52])
     days, regimes = mte["day"].to_numpy(), mte["regime"].to_numpy()
-    by_regime = {r: np.unique(days[regimes == r]) for r in np.unique(regimes)}
-    rows_of = {d: np.nonzero(days == d)[0] for d in np.unique(days)}
-    boots = [np.concatenate([rows_of[d] for v in by_regime.values() for d in rng.choice(v, len(v))])
+    byregime = {r: np.unique(days[regimes == r]) for r in np.unique(regimes)}
+    rowsof = {d: np.nonzero(days == d)[0] for d in np.unique(days)}
+    boots = [np.concatenate([rowsof[d] for v in byregime.values() for d in rng.choice(v, len(v))])
              for _ in range(N_BOOT)]
 
     def mse(S):
@@ -83,8 +83,8 @@ def run(city):
 
     out = {"noise_sd_ug_m3": sd, "n_train_maps": len(Xtr), "n_test_maps": len(Xte),
            "variogram_range_km": vg["range_m"] / 1000, "improvement": {}}
-    for n in N_VALUES[city]:
-        g, k = mse(order[:n]), mse(N.kmeans_network(cells, n, cfg.RANDOM_SEED))
+    for n in NVALS[city]:
+        g, k = mse(order[:n]), mse(N.kmeans_network(cells, n, cfg.SEED))
         bs = np.array([imp(g, k, i) for i in boots])
         out["improvement"][str(n)] = [float(imp(g, k)), *np.percentile(bs, [2.5, 97.5]).tolist()]
         print(f"  {city} N={n:3d}: {100 * out['improvement'][str(n)][0]:+.1f}% "
@@ -94,7 +94,7 @@ def run(city):
 
 if __name__ == "__main__":
     results = {c: run(c) for c in cfg.ALL_CITIES}
-    path = PROJECT_ROOT / "data" / "processed" / "phase5" / "phase5_diagnostic_base_only.json"
+    path = PROJ_ROOT / "data" / "processed" / "phase5" / "phase5_diagnostic_base_only.json"
     with open(path, "w") as f:
         json.dump(results, f, indent=2)
     print(f"wrote {path}")

@@ -37,15 +37,15 @@ OUT = ROOT / "Graphs" / "Poster picks" / "Excel"
 GREEN, TEAL, GREY, INK, MUTED, CELL = "#13703F", "#1F8BB8", "#8A8F8C", "#1D2B22", "#5C6B62", "#DFE6E1"
 K_COL = {200: "#7FBF95", 1000: GREEN, 8000: "#08391F"}
 CITIES = ("singapore", "melbourne")
-CITY_NAME = {"singapore": "Singapore", "melbourne": "Melbourne"}
+CITYNAME = {"singapore": "Singapore", "melbourne": "Melbourne"}
 SHORT = {"singapore": "SG", "melbourne": "MEL"}
-HEADLINE_N = {"singapore": 22, "melbourne": 8}
+MAIN_N = {"singapore": 22, "melbourne": 8}
 HEADLINE = "f0.25"
-REGIME_NAME = {"SIN1": "Southwest monsoon", "SIN2": "Inter-monsoon", "SIN3": "Northeast monsoon",
+REGIME_NAMES = {"SIN1": "Southwest monsoon", "SIN2": "Inter-monsoon", "SIN3": "Northeast monsoon",
                "MEL1": "Light south-easterlies", "MEL2": "Northerlies (before a front)",
                "MEL3": "Westerlies (after a front)"}
 LEVELS = ["L0", "L1", "L2_setA", "L2_setB", "L3_setA", "L3_setB", "L4_setA", "L4_setB", "L5"]
-LEVEL_LABEL = ["Known exactly", "Noisy output", "10% fixed sources (A)", "10% fixed sources (B)",
+LEVEL_LAB = ["Known exactly", "Noisy output", "10% fixed sources (A)", "10% fixed sources (B)",
                "30% fixed sources (A)", "30% fixed sources (B)", "30% fixed + noise (A)",
                "30% fixed + noise (B)", "Randomly moving"]
 STRATEGY = [("greedy", "Weather-informed", GREEN, "solid"), ("kmeans", "Evenly spread", TEAL, "solid"),
@@ -114,17 +114,17 @@ def axis(title, **kw):
     return base
 
 
-def ci_bars(book, ws, r_val, r_lo, r_hi, df, val, lo, hi, row, col_minus, col_plus, colour):
+def ci_bars(book, ws, rval, r_lo, r_hi, df, val, lo, hi, row, colminus, colplus, colour):
     """Custom error bars need positive distances; write them in helper columns."""
-    ws.write(row, col_minus, f"{val}: minus", book.head)
-    ws.write(row, col_plus, f"{val}: plus", book.head)
+    ws.write(row, colminus, f"{val}: minus", book.head)
+    ws.write(row, colplus, f"{val}: plus", book.head)
     for i in range(len(df)):
-        ws.write_number(row + 1 + i, col_minus, float(df[val].iloc[i] - df[lo].iloc[i]), book.num)
-        ws.write_number(row + 1 + i, col_plus, float(df[hi].iloc[i] - df[val].iloc[i]), book.num)
+        ws.write_number(row + 1 + i, colminus, float(df[val].iloc[i] - df[lo].iloc[i]), book.num)
+        ws.write_number(row + 1 + i, colplus, float(df[hi].iloc[i] - df[val].iloc[i]), book.num)
     n = len(df)
     return {"type": "custom", "direction": "both", "end_style": 1,
-            "minus_values": f"='{ws.name}'!{xl_range_abs(row + 1, col_minus, row + n, col_minus)}",
-            "plus_values": f"='{ws.name}'!{xl_range_abs(row + 1, col_plus, row + n, col_plus)}",
+            "minus_values": f"='{ws.name}'!{xl_range_abs(row + 1, colminus, row + n, colminus)}",
+            "plus_values": f"='{ws.name}'!{xl_range_abs(row + 1, colplus, row + n, colplus)}",
             "line": {"color": colour, "width": 1.25}}
 
 
@@ -140,7 +140,7 @@ def sheet_plumes(book, city):
     iy = np.rint((y.max() - y) / 2000).astype(int)          # north at the top
     nx, ny = ix.max() + 1, iy.max() + 1
     ws = book.sheet(f"1 Plumes {SHORT[city]}",
-                    f"{CITY_NAME[city]}: simulated daily PM2.5 from local emissions, typical day of each weather pattern",
+                    f"{CITYNAME[city]}: simulated daily PM2.5 from local emissions, typical day of each weather pattern",
                     "Each square is one 2 km grid cell (north at the top). Colour: white = low, dark green = high; "
                     "each map has its own colour scale. Values in µg/m³. Raw data in the table on the right.")
     cw = 1.1 if city == "melbourne" else 1.8
@@ -151,7 +151,7 @@ def sheet_plumes(book, city):
         r = str(ds["regime"].values[d])
         day = pd.Timestamp(ds["date"].values[d]).strftime("%-d %b %Y")
         c0 = left + m * (nx + gap)
-        ws.merge_range(top - 1, c0, top - 1, c0 + nx - 1, f"{REGIME_NAME[r]}, {day}", book.maphead)
+        ws.merge_range(top - 1, c0, top - 1, c0 + nx - 1, f"{REGIME_NAMES[r]}, {day}", book.maphead)
         for k in range(len(v)):
             ws.write_number(top + iy[k], c0 + ix[k], round(float(v[k]), 3), book.hidden)
         ws.conditional_format(top, c0, top + ny - 1, c0 + nx - 1,
@@ -159,12 +159,12 @@ def sheet_plumes(book, city):
         ws.set_column(c0, c0 + nx - 1, cw)
         ws.merge_range(top + ny + 1, c0, top + ny + 1, c0 + nx - 1,
                        f"Palest = {v.min():.2f}, darkest = {v.max():.2f} µg/m³", book.mapnote)
-        long[f"{REGIME_NAME[r]} ({day})"] = np.round(v, 4)
+        long[f"{REGIME_NAMES[r]} ({day})"] = np.round(v, 4)
     for rr in range(top, top + ny):
         ws.set_row(rr, cw * 7.5)
     page(ws, 0, 0, top + ny + 2, len(rep) * (nx + gap))
-    c_tab = left + len(rep) * (nx + gap) + 1
-    book.table(ws, top - 1, c_tab, long, book.num3)
+    ctab = left + len(rep) * (nx + gap) + 1
+    book.table(ws, top - 1, ctab, long, book.num3)
 
 
 # ---------------------------------------------------------
@@ -176,13 +176,13 @@ def sheet_networks(book, city):
     x, y = ds["cell_x"].values / 1000, ds["cell_y"].values / 1000
     x0, y0 = x.min(), y.min()
     nets = pd.read_csv(P4 / city / f"{city}_networks_trainall.csv")
-    n = HEADLINE_N[city]
+    n = MAIN_N[city]
     panels = [("greedy", HEADLINE, "Weather-informed", GREEN, "circle"),
               ("kmeans", "any", "Evenly spread", TEAL, "square")]
     if (nets["strategy"] == "existing").any():
         panels.append(("existing", "any", "Existing EPA stations", INK, "triangle"))
     ws = book.sheet(f"2 Networks {SHORT[city]}",
-                    f"{CITY_NAME[city]}: where each strategy places {n} sensors (the size of the city's real network)",
+                    f"{CITYNAME[city]}: where each strategy places {n} sensors (the size of the city's real network)",
                     "Coordinates in km from the south-west corner of the study area. Grey squares: candidate 2 km cells.")
     cand = pd.DataFrame({"Candidate x (km)": x - x0, "Candidate y (km)": y - y0})
     rc = book.table(ws, 3, 0, cand)
@@ -221,7 +221,7 @@ def sheet_networks(book, city):
 # 3 + 6. COLUMN CHARTS WITH CI BARS
 # ---------------------------------------------------------
 
-def column_chart(book, ws, row, title, series, cats_ref, y_min, y_max):
+def column_chart(book, ws, row, title, series, cats_ref, ymin, ymax):
     ch = book.chart("column")
     for s in series:
         ch.add_series({"name": s["name"], "categories": cats_ref, "values": s["values"],
@@ -231,7 +231,7 @@ def column_chart(book, ws, row, title, series, cats_ref, y_min, y_max):
     ch.set_x_axis(axis("How predictable the pollution sources are (most → least predictable)",
                        num_font={"size": 9, "color": INK}, label_position="low",
                        major_gridlines={"visible": False}))
-    ch.set_y_axis(axis("Accuracy gain (%)", min=y_min, max=y_max))
+    ch.set_y_axis(axis("Accuracy gain (%)", min=ymin, max=ymax))
     ch.set_size({"width": 900, "height": 380})
     return ch
 
@@ -245,16 +245,16 @@ def sheet_predictability(book):
     row = 3
     for ns, nm, title in [(22, 8, "Each city's real network size"), (22, 22, "Same number of sensors (22 each)"),
                           (22, 88, "Same sensor density")]:
-        df = pd.DataFrame({"Pollution sources": LEVEL_LABEL})
+        df = pd.DataFrame({"Pollution sources": LEVEL_LAB})
         for city, n in (("singapore", ns), ("melbourne", nm)):
             v = np.array([res[city][k]["improvement"][str(n)] for k in LEVELS]) * 100
-            lab = f"{CITY_NAME[city]} ({n} sensors)"
+            lab = f"{CITYNAME[city]} ({n} sensors)"
             df[lab], df[f"{lab} low"], df[f"{lab} high"] = v[:, 0], v[:, 1], v[:, 2]
         ws.write(row - 1, 0, title, book.head)
         r = book.table(ws, row, 0, df)
         series = []
         for j, (city, n) in enumerate((("singapore", ns), ("melbourne", nm))):
-            lab = f"{CITY_NAME[city]} ({n} sensors)"
+            lab = f"{CITYNAME[city]} ({n} sensors)"
             err = ci_bars(book, ws, None, None, None, df, lab, f"{lab} low", f"{lab} high",
                           row, 7 + 2 * j, 8 + 2 * j, INK)
             series.append({"name": lab, "values": book.ref(ws, r[lab]),
@@ -275,12 +275,12 @@ def sheet_k(book):
                     "size, at three spreading rates K. Error bars: 95% confidence intervals.")
     row = 3
     for city in CITIES:
-        n = HEADLINE_N[city]
-        df = pd.DataFrame({"Pollution sources": LEVEL_LABEL})
+        n = MAIN_N[city]
+        df = pd.DataFrame({"Pollution sources": LEVEL_LAB})
         for k, _, lab in ks:
             v = np.array([res[k][city][lv]["improvement"][str(n)] for lv in LEVELS]) * 100
             df[lab], df[f"{lab} low"], df[f"{lab} high"] = v[:, 0], v[:, 1], v[:, 2]
-        title = f"{CITY_NAME[city]} ({n} sensors, its real network size)"
+        title = f"{CITYNAME[city]} ({n} sensors, its real network size)"
         ws.write(row - 1, 0, title, book.head)
         r = book.table(ws, row, 0, df)
         series = []
@@ -307,12 +307,12 @@ def line(ch, book, ws, xr_, yr, name, colour, dash="solid", width=2.25, marker=N
     ch.add_series(s)
 
 
-def xy_chart(book, title, x_title, y_title, n_max, y_min=None, y_max=None):
+def xy_chart(book, title, xtitle, ytitle, nmax, ymin=None, ymax=None):
     ch = book.chart("scatter", "straight")
     ch.set_title({"name": title, "name_font": {"size": 12, "color": INK}})
-    ch.set_x_axis(axis(x_title, min=0, max=n_max, label_position="low", major_gridlines={"visible": False}))
-    ch.set_y_axis(axis(y_title, **({"min": y_min} if y_min is not None else {}),
-                       **({"max": y_max} if y_max is not None else {})))
+    ch.set_x_axis(axis(xtitle, min=0, max=nmax, label_position="low", major_gridlines={"visible": False}))
+    ch.set_y_axis(axis(ytitle, **({"min": ymin} if ymin is not None else {}),
+                       **({"max": ymax} if ymax is not None else {})))
     ch.set_size({"width": 620, "height": 360})
     return ch
 
@@ -346,13 +346,13 @@ def sheet_sensor_count(book):
         df["Gain, random hotspots (%)"] = 100 * c["improvement"].values
         df["Gain, random hotspots: low"] = 100 * c["ci_low"].values
         df["Gain, random hotspots: high"] = 100 * c["ci_high"].values
-        ws.write(2, col, CITY_NAME[city], book.head)
+        ws.write(2, col, CITYNAME[city], book.head)
         r = book.table(ws, 3, col, df, book.num3)
         X = r["Number of sensors"]
-        n_max = int(df["Number of sensors"].max())
+        nmax = int(df["Number of sensors"].max())
 
-        ch = xy_chart(book, f"{CITY_NAME[city]}: map error falls as sensors are added",
-                      "Number of sensors", "Map error, RMSE (µg/m³)", n_max, 0)
+        ch = xy_chart(book, f"{CITYNAME[city]}: map error falls as sensors are added",
+                      "Number of sensors", "Map error, RMSE (µg/m³)", nmax, 0)
         for key, name, colour in (("Weather-informed", "Weather-informed", GREEN), ("Evenly spread", "Evenly spread", TEAL)):
             line(ch, book, ws, X, r[f"{key} error"], f"{name} (measured)", colour,
                  marker={"type": "circle", "size": 4, "fill": {"color": colour}, "border": {"none": True}})
@@ -363,8 +363,8 @@ def sheet_sensor_count(book):
                      marker={"type": "circle", "size": 4, "fill": {"color": GREY}, "border": {"none": True}})
         ws.insert_chart(3, 31 + p * 10, ch)
 
-        ch = xy_chart(book, f"{CITY_NAME[city]}: gain from weather-informed placement",
-                      "Number of sensors", "Accuracy gain over even spacing (%)", n_max)
+        ch = xy_chart(book, f"{CITYNAME[city]}: gain from weather-informed placement",
+                      "Number of sensors", "Accuracy gain over even spacing (%)", nmax)
         for key, name, colour in (("sources known", "Emission sources known", GREEN),
                                   ("random hotspots", "Randomly moving hotspots", TEAL)):
             line(ch, book, ws, X, r[f"Gain, {key} (%)"], name, colour)
@@ -379,9 +379,9 @@ def sheet_sensor_count(book):
 
 def sheet_main_test(book, city):
     ws = book.sheet(f"5 Main test {SHORT[city]}",
-                    f"{CITY_NAME[city]}: map error by placement strategy, scored on all 2025 days",
+                    f"{CITYNAME[city]}: map error by placement strategy, scored on all 2025 days",
                     "Left: map error (RMSE, µg/m³). Right: accuracy gain of weather-informed over evenly spread "
-                    f"sensors (%), dashed = 95% confidence interval. Real network size: {HEADLINE_N[city]}.")
+                    f"sensors (%), dashed = 95% confidence interval. Real network size: {MAIN_N[city]}.")
     st = strategy_table(city)
     imp = pd.read_csv(P5 / city / f"{city}_improvement_all2025_trainall.csv")
     imp = imp[imp["noise"] == HEADLINE][["N", "improvement", "ci_low", "ci_high"]]
@@ -392,9 +392,9 @@ def sheet_main_test(book, city):
     df["Gain (%)"], df["Gain: low"], df["Gain: high"] = 100 * df.pop("improvement"), 100 * df.pop("ci_low"), 100 * df.pop("ci_high")
     r = book.table(ws, 3, 0, df, book.num3)
     X = r["Number of sensors"]
-    n_max = int(df["Number of sensors"].max())
-    ch = xy_chart(book, f"{CITY_NAME[city]}: map error by placement strategy", "Number of sensors",
-                  "Map error on 2025 days, RMSE (µg/m³)", n_max, 0)
+    nmax = int(df["Number of sensors"].max())
+    ch = xy_chart(book, f"{CITYNAME[city]}: map error by placement strategy", "Number of sensors",
+                  "Map error on 2025 days, RMSE (µg/m³)", nmax, 0)
     for key, name, colour, dash in STRATEGY:
         col = df[f"{name} error"]
         if col.isna().any():      # random is only scored at some N: plot as points
@@ -409,8 +409,8 @@ def sheet_main_test(book, city):
         line(ch, book, ws, re_["Existing network: sensors"], re_["Existing network: error"], "Existing EPA network",
              INK, marker={"type": "diamond", "size": 11, "fill": {"color": INK}, "border": {"color": "#FFFFFF"}})
     ws.insert_chart(3, 14, ch)
-    ch = xy_chart(book, f"{CITY_NAME[city]}: gain from weather-informed placement", "Number of sensors",
-                  "Accuracy gain over even spacing (%)", n_max)
+    ch = xy_chart(book, f"{CITYNAME[city]}: gain from weather-informed placement", "Number of sensors",
+                  "Accuracy gain over even spacing (%)", nmax)
     line(ch, book, ws, X, r["Gain (%)"], "Accuracy gain", GREEN)
     line(ch, book, ws, X, r["Gain: low"], "95% confidence interval", GREEN, "dash", 1)
     line(ch, book, ws, X, r["Gain: high"], "95% CI high", GREEN, "dash", 1)

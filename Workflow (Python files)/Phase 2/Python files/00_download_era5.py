@@ -7,7 +7,7 @@ import xarray as xr
 import config
 
 
-DATA_FORMAT = "netcdf"      # "netcdf" or "grib" - script 02 handles both
+DATA_FMT = "netcdf"      # "netcdf" or "grib" - script 02 handles both
 
 MONTHS = [f"{m:02d}" for m in range(1, 13)]
 DAYS = [f"{d:02d}" for d in range(1, 32)]
@@ -20,12 +20,12 @@ def load_month_dataset(path):
     if not zipfile.is_zipfile(path):
         return xr.load_dataset(path)
 
-    with TemporaryDirectory() as tmp_dir:
+    with TemporaryDirectory() as tmpdir:
         with zipfile.ZipFile(path) as zf:
-            zf.extractall(tmp_dir)
+            zf.extractall(tmpdir)
             names = zf.namelist()
 
-        groups = [xr.load_dataset(f"{tmp_dir}/{name}") for name in names]
+        groups = [xr.load_dataset(f"{tmpdir}/{name}") for name in names]
 
     return xr.merge(groups, join="inner", compat="override")
 
@@ -34,56 +34,56 @@ def download(client, city, year):
 
     cfg = config.city_config(city)
 
-    out_dir = config.raw_dir(city)
-    out_dir.mkdir(parents=True, exist_ok=True)
+    outdir = config.raw_dir(city)
+    outdir.mkdir(parents=True, exist_ok=True)
 
-    suffix = "nc" if DATA_FORMAT == "netcdf" else "grib"
+    suffix = "nc" if DATA_FMT == "netcdf" else "grib"
 
-    target = out_dir / f"{city}_era5_{year}.{suffix}"
+    target = outdir / f"{city}_era5_{year}.{suffix}"
 
     if target.exists():
         print(f"  Already present, skipping: {target.name}")
         return
 
-    month_files = []
+    monthfiles = []
 
     for month in MONTHS:
 
-        month_file = out_dir / f"_tmp_{city}_era5_{year}_{month}.{suffix}"
-        month_files.append(month_file)
+        monthfile = outdir / f"_tmp_{city}_era5_{year}_{month}.{suffix}"
+        monthfiles.append(monthfile)
 
-        if month_file.exists():
-            print(f"  Month already present, skipping: {month_file.name}")
+        if monthfile.exists():
+            print(f"  Month already present, skipping: {monthfile.name}")
             continue
 
-        print(f"  Requesting {city} {year}-{month} -> {month_file.name}")
+        print(f"  Requesting {city} {year}-{month} -> {monthfile.name}")
 
         client.retrieve(
             "reanalysis-era5-single-levels",
             {
                 "product_type": "reanalysis",
-                "data_format": DATA_FORMAT,
+                "data_format": DATA_FMT,
                 "download_format": "unarchived",
-                "variable": config.ERA5_VARIABLES,
+                "variable": config.ERA5_VARS,
                 "year": [str(year)],
                 "month": [month],
                 "day": DAYS,
                 "time": TIMES,
                 "area": cfg["area"],       # [North, West, South, East]
             },
-            str(month_file),
+            str(monthfile),
         )
 
-    print(f"  Merging {len(month_files)} months -> {target.name}")
+    print(f"  Merging {len(monthfiles)} months -> {target.name}")
 
-    monthly = [load_month_dataset(f) for f in month_files]
-    time_dim = "valid_time" if "valid_time" in monthly[0].dims else "time"
+    monthly = [load_month_dataset(f) for f in monthfiles]
+    timedim = "valid_time" if "valid_time" in monthly[0].dims else "time"
 
-    ds = xr.concat(monthly, dim=time_dim).sortby(time_dim)
+    ds = xr.concat(monthly, dim=timedim).sortby(timedim)
     ds.to_netcdf(target)
 
-    for month_file in month_files:
-        month_file.unlink()
+    for monthfile in monthfiles:
+        monthfile.unlink()
 
     print(f"  Saved {target}")
 

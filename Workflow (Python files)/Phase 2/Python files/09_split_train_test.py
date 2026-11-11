@@ -8,7 +8,7 @@ import utils
 
 def split(city):
 
-    utils.banner(f"TRAIN/TEST SPLIT: {city}  (mode={config.SPLIT_MODE})")
+    utils.banner(f"TRAIN/TEST SPLIT: {city}  (mode={config.SPLITMODE})")
 
     base = config.processed_dir(city)
 
@@ -17,33 +17,33 @@ def split(city):
         parse_dates=["date"],
     )
 
-    if config.SPLIT_MODE == "stratified_random":
+    if config.SPLITMODE == "stratified_random":
 
-        train_idx, test_idx = train_test_split(
+        trainidx, testidx = train_test_split(
             daily.index,
-            test_size=config.TEST_SIZE,
-            random_state=config.RANDOM_SEED,
+            test_size=config.TESTSIZE,
+            random_state=config.SEED,
             stratify=daily["regime"],
         )
 
         daily["split"] = "train"
-        daily.loc[test_idx, "split"] = "test"
+        daily.loc[testidx, "split"] = "test"
 
-    elif config.SPLIT_MODE == "temporal":
+    elif config.SPLITMODE == "temporal":
 
-        is_holdout = daily["date"].dt.year.isin(config.HOLDOUT_YEARS)
+        isholdout = daily["date"].dt.year.isin(config.HOLDOUT_YRS)
 
         daily["split"] = "train"
-        daily.loc[is_holdout, "split"] = "test"
+        daily.loc[isholdout, "split"] = "test"
 
-        if not is_holdout.any():
+        if not isholdout.any():
             raise ValueError(
-                f"No days found in HOLDOUT_YEARS={config.HOLDOUT_YEARS}"
+                f"No days found in HOLDOUT_YEARS={config.HOLDOUT_YRS}"
             )
 
     else:
         raise ValueError(
-            f"Unknown SPLIT_MODE: {config.SPLIT_MODE!r}"
+            f"Unknown SPLIT_MODE: {config.SPLITMODE!r}"
         )
       
     table = pd.crosstab(daily["regime"], daily["split"])

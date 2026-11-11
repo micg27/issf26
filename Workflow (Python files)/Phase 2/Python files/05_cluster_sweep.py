@@ -21,18 +21,18 @@ def sweep(city):
 
     utils.banner(f"CLUSTER SWEEP: {city}")
 
-    in_path = (
+    inpath = (
         config.processed_dir(city) / f"{city}_daily_features.csv"
     )
 
-    if not in_path.exists():
+    if not inpath.exists():
         raise FileNotFoundError(
-            f"{in_path} not found; run 04 first."
+            f"{inpath} not found; run 04 first."
         )
 
     out = config.output_dir(city, "clustering")
 
-    daily = pd.read_csv(in_path, parse_dates=["date"])
+    daily = pd.read_csv(inpath, parse_dates=["date"])
 
     X = daily[config.FEATURES]
 
@@ -44,8 +44,8 @@ def sweep(city):
 
         model = KMeans(
             n_clusters=k,
-            n_init=config.KMEANS_N_INIT,
-            random_state=config.RANDOM_SEED,
+            n_init=config.KMEANS_INIT,
+            random_state=config.SEED,
         )
 
         labels = model.fit_predict(Z)

@@ -43,20 +43,20 @@ def qc(city, year, records):
             continue
 
         missing = int(ds[var].isnull().sum())
-        minimum = float(ds[var].min())
-        maximum = float(ds[var].max())
+        minval = float(ds[var].min())
+        maxval = float(ds[var].max())
 
         print(
-            f"  {var:16s} {missing:10d} {minimum:12.3f} {maximum:12.3f}"
+            f"  {var:16s} {missing:10d} {minval:12.3f} {maxval:12.3f}"
         )
 
         row[f"{var}_missing"] = missing
-        row[f"{var}_min"] = minimum
-        row[f"{var}_max"] = maximum
+        row[f"{var}_min"] = minval
+        row[f"{var}_max"] = maxval
 
         low, high = PLAUSIBLE.get(var, (-np.inf, np.inf))
 
-        if minimum < low or maximum > high:
+        if minval < low or maxval > high:
             print(
                 f"    {var} outside plausible range "
                 f"[{low}, {high}]"
@@ -80,14 +80,14 @@ def qc(city, year, records):
     row["n_timesteps"] = len(times)
 
     dims = utils.spatial_dims(ds)
-    city_mean = ds.mean(dim=dims) if dims else ds
+    citymean = ds.mean(dim=dims) if dims else ds
 
     for var in ["wind_speed", "blh", "t2m_c"]:
 
-        if var not in city_mean:
+        if var not in citymean:
             continue
 
-        values = city_mean[var].values.ravel()
+        values = citymean[var].values.ravel()
         values = values[np.isfinite(values)]
 
         fig, ax = plt.subplots()
@@ -101,8 +101,8 @@ def qc(city, year, records):
 
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.scatter(
-        city_mean["u10"].values.ravel(),
-        city_mean["v10"].values.ravel(),
+        citymean["u10"].values.ravel(),
+        citymean["v10"].values.ravel(),
         s=2,
         alpha=0.15,
     )
@@ -116,7 +116,7 @@ def qc(city, year, records):
     fig.savefig(out / f"wind_uv_scatter_{year}.png", dpi=200)
     plt.close(fig)
 
-    month = city_mean.sel(
+    month = citymean.sel(
         time=slice(f"{year}-01-01", f"{year}-01-31 23:59")
     )
 
@@ -138,7 +138,7 @@ def main():
 
     cities, years = utils.parse_cities(
         "QC the processed hourly meteorology.",
-        with_year=True,
+        withyear=True,
     )
 
     records = []
@@ -149,7 +149,7 @@ def main():
 
     if records:
         summary = pd.DataFrame(records)
-        path = config.OUTPUT_DIR / "qc_summary.csv"
+        path = config.OUTDIR / "qc_summary.csv"
         path.parent.mkdir(parents=True, exist_ok=True)
         summary.to_csv(path, index=False)
         print(f"\nQC summary written to {path}")

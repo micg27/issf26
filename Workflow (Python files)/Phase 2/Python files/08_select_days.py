@@ -13,38 +13,38 @@ def select(city):
 
     base = config.processed_dir(city)
 
-    split_path = base / f"{city}_regimes_split.csv"
+    splitpath = base / f"{city}_regimes_split.csv"
   
-    daily = pd.read_csv(split_path, parse_dates=["date"])
+    daily = pd.read_csv(splitpath, parse_dates=["date"])
 
     centroids = pd.read_csv(
         base / f"{city}_cluster_centroids_standardized.csv"
     )
 
     with open(base / f"{city}_scaler.json") as f:
-        scaler_info = json.load(f)
+        scalerinfo = json.load(f)
 
 
-    mean = np.array(scaler_info["mean"])
-    scale = np.array(scaler_info["scale"])
+    mean = np.array(scalerinfo["mean"])
+    scale = np.array(scalerinfo["scale"])
 
     Z = (daily[config.FEATURES].values - mean) / scale
   
     representatives = []
 
-    for _, centroid_row in centroids.iterrows():
+    for _, centroidrow in centroids.iterrows():
 
-        cluster_index = int(centroid_row["cluster_index"])
-        regime = centroid_row["regime"]
+        clusteridx = int(centroidrow["cluster_index"])
+        regime = centroidrow["regime"]
 
-        mask = daily["cluster_index"].values == cluster_index
+        mask = daily["cluster_index"].values == clusteridx
         positions = np.where(mask)[0]
 
         if positions.size == 0:
-            print(f"  WARNING: no days in cluster {cluster_index}")
+            print(f"  WARNING: no days in cluster {clusteridx}")
             continue
 
-        centroid = centroid_row[config.FEATURES].values.astype(float)
+        centroid = centroidrow[config.FEATURES].values.astype(float)
 
         distances = np.linalg.norm(Z[positions] - centroid, axis=1)
 
@@ -54,7 +54,7 @@ def select(city):
             {
                 "date": daily.loc[best, "date"],
                 "regime": regime,
-                "cluster_index": cluster_index,
+                "cluster_index": clusteridx,
                 "distance_to_centroid": float(distances.min()),
                 "selection": "representative",
             }
@@ -66,30 +66,30 @@ def select(city):
         base / f"{city}_representative_days.csv", index=False
     )
 
-    total = config.N_SAMPLE_PER_REGIME
+    total = config.N_PER_REGIME
 
-    n_test = max(1, round(total * config.TEST_SIZE))
-    n_train = max(1, total - n_test)
+    ntest = max(1, round(total * config.TESTSIZE))
+    ntrain = max(1, total - ntest)
 
-    quota = {"train": n_train, "test": n_test}
+    quota = {"train": ntrain, "test": ntest}
 
     print(
-        f"\n  Target per regime: {n_train} train + {n_test} test "
-        f"= {n_train + n_test}"
+        f"\n  Target per regime: {ntrain} train + {ntest} test "
+        f"= {ntrain + ntest}"
     )
 
     samples = []
 
     for regime, subset in daily.groupby("regime"):
 
-        for split_name, target in quota.items():
+        for splitname, target in quota.items():
 
-            pool = subset[subset["split"] == split_name]
+            pool = subset[subset["split"] == splitname]
 
             n = min(target, len(pool))
           
             chosen = pool.sample(
-                n=n, random_state=config.RANDOM_SEED
+                n=n, random_state=config.SEED
             )
 
             samples.append(

@@ -21,9 +21,9 @@ STAGES = [
 ]
 
 
-def run(script, city_args):
+def run(script, cityargs):
 
-    command = [sys.executable, str(HERE / script)] + city_args
+    command = [sys.executable, str(HERE / script)] + cityargs
 
     print(f"\n>>> {' '.join(command)}")
 
@@ -45,7 +45,7 @@ def main():
 
     args = parser.parse_args()
 
-    city_args = ["--city", args.city] if args.city else ["--all"]
+    cityargs = ["--city", args.city] if args.city else ["--all"]
 
     cities = [args.city] if args.city else config.ALL_CITIES
 
@@ -54,10 +54,10 @@ def main():
         if not stages:
             raise SystemExit(f"Unknown stage: {args.only}")
     else:
-        indices = [i for i, s in enumerate(STAGES) if s[0] == args.start]
-        if not indices:
+        inds = [i for i, s in enumerate(STAGES) if s[0] == args.start]
+        if not inds:
             raise SystemExit(f"Unknown stage: {args.start}")
-        stages = STAGES[indices[0]:]
+        stages = STAGES[inds[0]:]
 
     for code, script, _ in stages:
 
@@ -87,7 +87,7 @@ def main():
                 print("then re-run:  python run_phase2.py --from 06")
                 return
 
-        run(script, city_args)
+        run(script, cityargs)
 
     print("\n" + "=" * 68)
     print("PHASE 2 COMPLETE")

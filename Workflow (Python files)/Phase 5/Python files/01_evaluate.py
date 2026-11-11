@@ -40,8 +40,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
-P4 = PROJECT_ROOT / "Workflow" / "Phase 4" / "Python files"
+PROJ_ROOT = Path(__file__).resolve().parents[3]
+P4 = PROJ_ROOT / "Workflow" / "Phase 4" / "Python files"
 sys.path.insert(0, str(P4))
 import networks as N  # noqa: E402
 
@@ -49,36 +49,36 @@ _spec = importlib.util.spec_from_file_location("phase4_config", P4 / "config.py"
 cfg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cfg)
 
-OUT_DATA = PROJECT_ROOT / "data" / "processed" / "phase5"
-OUT_FIG = PROJECT_ROOT / "outputs" / "phase5"
-TEST_SET = "selected"        # set from --test-set; "all2025" = post-results extension
-TRAIN_SET = "selected"       # set from --train-set; "all" = networks chosen from every 2021-24 day
+OUTDATA = PROJ_ROOT / "data" / "processed" / "phase5"
+OUT_FIG = PROJ_ROOT / "outputs" / "phase5"
+TESTSET = "selected"        # set from --test-set; "all2025" = post-results extension
+TRAINSET = "selected"       # set from --train-set; "all" = networks chosen from every 2021-24 day
 SUFFIX = ""
-NET_SUFFIX = ""
+NET_SUF = ""
 K_TAG = ""                   # Phase 8: e.g. "_K200" = simulations and networks at K = 200
 N_BOOT = 2000
-RANDOM_N_STEP = 5            # random baseline every 5th N (plus headline N)
-HEADLINE = f"f{cfg.HEADLINE_NOISE_FRACTION:g}"
+RAND_STEP = 5            # random baseline every 5th N (plus headline N)
+HEADLINE = f"f{cfg.MAIN_NOISE:g}"
 
 
 def city_dirs(city):
-    d, f = OUT_DATA / city, OUT_FIG / (city + SUFFIX)
+    d, f = OUTDATA / city, OUT_FIG / (city + SUFFIX)
     d.mkdir(parents=True, exist_ok=True)
     f.mkdir(parents=True, exist_ok=True)
     return d, f
 
 
-def bootstrap_index(meta, n_boot, seed):
+def bootstrap_index(meta, nboot, seed):
     """Stratified day bootstrap -> list of map-index arrays."""
     rng = np.random.default_rng(seed)
-    days_by_regime = {r: g["day"].unique() for r, g in meta.groupby("regime")}
-    maps_by_day = {d: np.nonzero(meta["day"].to_numpy() == d)[0] for d in meta["day"].unique()}
+    regimedays = {r: g["day"].unique() for r, g in meta.groupby("regime")}
+    daymaps = {d: np.nonzero(meta["day"].to_numpy() == d)[0] for d in meta["day"].unique()}
     out = []
-    for _ in range(n_boot):
+    for _ in range(nboot):
         idx = []
-        for r, days in days_by_regime.items():
+        for r, days in regimedays.items():
             for d in rng.choice(days, len(days), replace=True):
-                idx.append(maps_by_day[d])
+                idx.append(daymaps[d])
         out.append(np.concatenate(idx))
     return out
 
@@ -94,15 +94,15 @@ def weighted_rmse(mse, w, idx=None):
 
 def evaluate(city):
     print(f"=== {city}")
-    data_dir, fig_dir = city_dirs(city)
-    maps = (N.load_maps(city, TEST_SET, "all", k_tag=K_TAG) if K_TAG
-            else N.load_maps(city, TEST_SET))
+    datadir, figdir = city_dirs(city)
+    maps = (N.load_maps(city, TESTSET, "all", k_tag=K_TAG) if K_TAG
+            else N.load_maps(city, TESTSET))
     te, cells = maps["test"], maps["cells"]
     X, w, meta = te["X"], te["w"], te["meta"]
     C = X.shape[1]
     p4 = cfg.processed_dir(city)
-    nets = pd.read_csv(p4 / f"{city}_networks{NET_SUFFIX}.csv")
-    kj = json.load(open(p4 / f"{city}_kriging{NET_SUFFIX}.json"))
+    nets = pd.read_csv(p4 / f"{city}_networks{NET_SUF}.csv")
+    kj = json.load(open(p4 / f"{city}_kriging{NET_SUF}.json"))
     vg = kj["variogram"]
     K = N.covariance(cells, vg)
     noise = kj["noise_sd_ug_m3"]
@@ -112,7 +112,7 @@ def evaluate(city):
         W = N.ok_weights(K, S, N.sensor_variance(vg, sd**2))
         return N.map_mse(X, S, W, sd**2)
 
-    rows, mse_store = [], {}
+    rows, msestore = [], {}
     for label, sd in noise.items():
         for strat in ("greedy", "qr", "kmeans", "existing"):
             sub = nets[(nets["strategy"] == strat)
@@ -120,42 +120,42 @@ def evaluate(city):
             for n, g in sub.groupby("N"):
                 S = g.sort_values("rank")["cell_index"].tolist()
                 mse = per_map_mse(S, sd)
-                mse_store[(strat, label, n)] = mse
+                msestore[(strat, label, n)] = mse
                 rows.append((strat, label, n, weighted_rmse(mse, w)))
         print(f"  scored {label}")
 
     # Random baseline: mean over networks, headline noise, every RANDOM_N_STEP
     sd = noise[HEADLINE]
-    n_vals = sorted(set(range(cfg.N_MIN, cfg.N_MAX[city] + 1, RANDOM_N_STEP))
-                    | {cfg.HEADLINE_N[city]})
-    for n in n_vals:
+    nvals = sorted(set(range(cfg.N_MIN, cfg.N_MAX[city] + 1, RAND_STEP))
+                    | {cfg.MAIN_N[city]})
+    for n in nvals:
         vals = [weighted_rmse(per_map_mse(S, sd), w)
-                for S in N.random_networks(C, n, cfg.N_RANDOM_NETWORKS, cfg.RANDOM_SEED)]
+                for S in N.random_networks(C, n, cfg.N_RAND_NETS, cfg.SEED)]
         rows.append(("random_mean", HEADLINE, n, float(np.mean(vals))))
         rows.append(("random_p05", HEADLINE, n, float(np.percentile(vals, 5))))
 
     scores = pd.DataFrame(rows, columns=["strategy", "noise", "N", "test_rmse"])
-    scores.to_csv(data_dir / f"{city}_test_scores{SUFFIX}.csv", index=False)
+    scores.to_csv(datadir / f"{city}_test_scores{SUFFIX}.csv", index=False)
 
     # Greedy vs k-means: improvement and paired bootstrap CI, every N, every noise.
-    boots = bootstrap_index(meta, N_BOOT, [cfg.RANDOM_SEED, 5, len(city)])
-    imp_rows = []
+    boots = bootstrap_index(meta, N_BOOT, [cfg.SEED, 5, len(city)])
+    improws = []
     for label in noise:
         for n in range(cfg.N_MIN, cfg.N_MAX[city] + 1):
-            g, k = mse_store[("greedy", label, n)], mse_store[("kmeans", label, n)]
+            g, k = msestore[("greedy", label, n)], msestore[("kmeans", label, n)]
             point = 1 - weighted_rmse(g, w) / weighted_rmse(k, w)
             bs = np.array([1 - weighted_rmse(g, w, i) / weighted_rmse(k, w, i) for i in boots])
-            imp_rows.append((label, n, point, *np.percentile(bs, [2.5, 97.5]), bs.std()))
-    imp = pd.DataFrame(imp_rows, columns=["noise", "N", "improvement", "ci_low", "ci_high", "boot_sd"])
-    imp.to_csv(data_dir / f"{city}_improvement{SUFFIX}.csv", index=False)
+            improws.append((label, n, point, *np.percentile(bs, [2.5, 97.5]), bs.std()))
+    imp = pd.DataFrame(improws, columns=["noise", "N", "improvement", "ci_low", "ci_high", "boot_sd"])
+    imp.to_csv(datadir / f"{city}_improvement{SUFFIX}.csv", index=False)
 
     # Per-regime improvement at the headline budget and noise.
-    n0 = cfg.HEADLINE_N[city]
-    g0, k0 = mse_store[("greedy", HEADLINE, n0)], mse_store[("kmeans", HEADLINE, n0)]
-    by_regime = {}
+    n0 = cfg.MAIN_N[city]
+    g0, k0 = msestore[("greedy", HEADLINE, n0)], msestore[("kmeans", HEADLINE, n0)]
+    byregime = {}
     for r, sub in meta.groupby("regime"):
         i = sub.index.to_numpy()
-        by_regime[r] = 1 - np.sqrt(np.mean(g0[i])) / np.sqrt(np.mean(k0[i]))
+        byregime[r] = 1 - np.sqrt(np.mean(g0[i])) / np.sqrt(np.mean(k0[i]))
 
     # Equivalent sensors: smallest k-means N matching greedy's error at n0.
     sc = scores[scores["noise"] == HEADLINE]
@@ -164,9 +164,9 @@ def evaluate(city):
     match = km[km["test_rmse"] <= target]
     equiv = int(match["N"].iloc[0]) if len(match) else None
 
-    plot(city, scores, imp, fig_dir)
-    return {"scores": scores, "imp": imp, "boots": boots, "mse": mse_store, "w": w,
-            "by_regime": by_regime, "equiv_kmeans_N": equiv, "meta": meta}
+    plot(city, scores, imp, figdir)
+    return {"scores": scores, "imp": imp, "boots": boots, "mse": msestore, "w": w,
+            "by_regime": byregime, "equiv_kmeans_N": equiv, "meta": meta}
 
 
 def improvement_draws(res, label, n):
@@ -177,7 +177,7 @@ def improvement_draws(res, label, n):
 def compare(sg, mel):
     """Melbourne minus Singapore improvement, with CIs (independent bootstraps)."""
     pairs = {
-        "own_network_size": (cfg.HEADLINE_N["singapore"], cfg.HEADLINE_N["melbourne"]),
+        "own_network_size": (cfg.MAIN_N["singapore"], cfg.MAIN_N["melbourne"]),
         "equal_count_N8": (8, 8),
         "equal_count_N22": (22, 22),
         "equal_count_N40": (40, 40),
@@ -220,7 +220,7 @@ def band_means(city, res):
     return out
 
 
-def plot(city, scores, imp, fig_dir):
+def plot(city, scores, imp, figdir):
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.2))
     ax = axes[0]
     for strat, style in [("greedy", "-"), ("kmeans", "-"), ("qr", "--"), ("random_mean", ":")]:
@@ -229,12 +229,12 @@ def plot(city, scores, imp, fig_dir):
     ex = scores[(scores["strategy"] == "existing") & (scores["noise"] == HEADLINE)]
     if len(ex):
         ax.plot(ex["N"], ex["test_rmse"], "k*", ms=10, label="existing EPA network")
-    ax.axvline(cfg.HEADLINE_N[city], color="grey", ls=":", lw=1)
+    ax.axvline(cfg.MAIN_N[city], color="grey", ls=":", lw=1)
     km = scores[(scores["strategy"] == "kmeans") & (scores["noise"] == HEADLINE)]["test_rmse"]
     ax.set_ylim(0, 1.6 * km.max())
     ax.set_xlabel("number of sensors N")
     ax.set_ylabel("test RMSE, 2025 days (ug/m3)")
-    ax.set_title(f"{city}: reconstruction error (noise f = {cfg.HEADLINE_NOISE_FRACTION})")
+    ax.set_title(f"{city}: reconstruction error (noise f = {cfg.MAIN_NOISE})")
     ax.legend(fontsize=8)
 
     ax = axes[1]
@@ -242,18 +242,18 @@ def plot(city, scores, imp, fig_dir):
     ax.plot(s["N"], 100 * s["improvement"], color="#c0392b")
     ax.fill_between(s["N"], 100 * s["ci_low"], 100 * s["ci_high"], color="#c0392b", alpha=0.2)
     ax.axhline(0, color="k", lw=0.8)
-    ax.axvline(cfg.HEADLINE_N[city], color="grey", ls=":", lw=1)
+    ax.axvline(cfg.MAIN_N[city], color="grey", ls=":", lw=1)
     ax.set_xlabel("number of sensors N")
     ax.set_ylabel("greedy improvement over k-means (%)")
     ax.set_title("weather-informed vs evenly spread (95% CI)")
     fig.tight_layout()
-    fig.savefig(fig_dir / "test_results.png", dpi=130)
+    fig.savefig(figdir / "test_results.png", dpi=130)
     plt.close(fig)
 
 
 def summarize(city, res):
     imp, sc = res["imp"], res["scores"]
-    n0 = cfg.HEADLINE_N[city]
+    n0 = cfg.MAIN_N[city]
     h = imp[(imp["noise"] == HEADLINE) & (imp["N"] == n0)].iloc[0]
     def rm(strat, noise, n):
         r = sc[(sc["strategy"] == strat) & (sc["noise"] == noise) & (sc["N"] == n)]
@@ -287,21 +287,21 @@ if __name__ == "__main__":
     ap.add_argument("--k", type=float, default=None,
                     help="Phase 8: K (m2/s) of the simulations; needs --test-set all2025 --train-set all")
     args = ap.parse_args()
-    TEST_SET, TRAIN_SET = args.test_set, args.train_set
-    if args.k is not None and (TEST_SET, TRAIN_SET) != ("all2025", "all"):
+    TESTSET, TRAINSET = args.test_set, args.train_set
+    if args.k is not None and (TESTSET, TRAINSET) != ("all2025", "all"):
         ap.error("--k needs --test-set all2025 --train-set all")
     K_TAG = "" if args.k is None else f"_K{args.k:g}"
-    NET_SUFFIX = ("" if TRAIN_SET == "selected" else "_trainall") + K_TAG
-    SUFFIX = ("" if TEST_SET == "selected" else "_all2025") + NET_SUFFIX
+    NET_SUF = ("" if TRAINSET == "selected" else "_trainall") + K_TAG
+    SUFFIX = ("" if TESTSET == "selected" else "_all2025") + NET_SUF
     res = {c: evaluate(c) for c in cfg.ALL_CITIES}
     results = {c: summarize(c, r) for c, r in res.items()}
     for c, r in res.items():
         results[c]["band_mean_improvement_descriptive"] = band_means(c, r)
     results["city_comparison"] = compare(res["singapore"], res["melbourne"])
-    OUT_DATA.mkdir(parents=True, exist_ok=True)
-    results["test_set"] = TEST_SET
-    results["train_set"] = TRAIN_SET
+    OUTDATA.mkdir(parents=True, exist_ok=True)
+    results["test_set"] = TESTSET
+    results["train_set"] = TRAINSET
     results["K_m2_s"] = args.k
-    with open(OUT_DATA / f"phase5_results{SUFFIX}.json", "w") as f:
+    with open(OUTDATA / f"phase5_results{SUFFIX}.json", "w") as f:
         json.dump(results, f, indent=2)
     print(json.dumps(results, indent=2))

@@ -9,8 +9,8 @@ def process(city, year):
 
     utils.banner(f"PREPROCESS: {city} {year}")
 
-    out_dir = config.processed_dir(city)
-    outfile = out_dir / f"{city}_hourly_{year}.nc"
+    outdir = config.processed_dir(city)
+    outfile = outdir / f"{city}_hourly_{year}.nc"
 
     if outfile.exists():
         print(f"  Already exists, skipping: {outfile.name}")
@@ -30,11 +30,11 @@ def process(city, year):
 
             group = utils.standardize_time(group)
 
-            for var in config.REQUIRED_VARS:
+            for var in config.NEEDED_VARS:
                 if var in group.data_vars and var not in found:
                     found[var] = group[[var]]
 
-    missing = config.REQUIRED_VARS - set(found)
+    missing = config.NEEDED_VARS - set(found)
 
     if missing:
         raise ValueError(
@@ -82,13 +82,13 @@ def process(city, year):
         "units": "degree_Celsius",
     }
 
-    n_hours = ds.sizes["time"]
+    nhours = ds.sizes["time"]
     expected = 8784 if year % 4 == 0 else 8760
 
-    print(f"  Timesteps: {n_hours} (expected {expected})")
+    print(f"  Timesteps: {nhours} (expected {expected})")
 
-    if n_hours != expected:
-        print(f"  {expected - n_hours} hours missing.")
+    if nhours != expected:
+        print(f"  {expected - nhours} hours missing.")
 
     dims = utils.spatial_dims(ds)
     print(f"  Grid dims: {[(d, ds.sizes[d]) for d in dims]}")
@@ -102,7 +102,7 @@ def main():
 
     cities, years = utils.parse_cities(
         "Preprocess raw ERA5 into hourly NetCDF.",
-        with_year=True,
+        withyear=True,
     )
 
     for city in cities:

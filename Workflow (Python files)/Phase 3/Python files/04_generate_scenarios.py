@@ -8,10 +8,10 @@ import pandas as pd
 import xarray as xr
 import config
 import transport
-SPINUP_HOURS = 24
+SPINUP_HRS = 24
 
-def parse_cities(description):
-    parser = argparse.ArgumentParser(description=description)
+def parse_cities(desc):
+    parser = argparse.ArgumentParser(description=desc)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--city", choices=config.ALL_CITIES)
     group.add_argument("--all", action="store_true")
@@ -20,17 +20,17 @@ def parse_cities(description):
 
 def synthetic_emissions(base, land, rng):
     """One synthetic emission field (ug/s per cell) with base's expected total."""
-    s = config.SYNTH_AREA_SIGMA
-    area = (1 - config.SYNTH_POINT_SHARE) * base * rng.lognormal(-s**2 / 2, s, base.shape)
+    s = config.SYN_AREA_SIG
+    area = (1 - config.SYN_PT_SHARE) * base * rng.lognormal(-s**2 / 2, s, base.shape)
     rows, cols = np.nonzero(land)
-    n_pts = rng.poisson(config.SYNTH_POINT_MEAN_COUNT)
-    pick = rng.integers(0, len(rows), n_pts)
-    sp = config.SYNTH_POINT_SIGMA
-    mean_each = config.SYNTH_POINT_SHARE * base.sum() / config.SYNTH_POINT_MEAN_COUNT
-    mags = mean_each * rng.lognormal(-sp**2 / 2, sp, n_pts)
+    npts = rng.poisson(config.SYN_PT_COUNT)
+    pick = rng.integers(0, len(rows), npts)
+    sp = config.SYN_PT_SIG
+    meaneach = config.SYN_PT_SHARE * base.sum() / config.SYN_PT_COUNT
+    mags = meaneach * rng.lognormal(-sp**2 / 2, sp, npts)
     points = np.zeros_like(base)
     np.add.at(points, (rows[pick], cols[pick]), mags)
-    return area + points, n_pts
+    return area + points, npts
 
 def generate(city):
     print(f"=== {city}")
@@ -39,10 +39,10 @@ def generate(city):
     domain = xr.open_dataset(pdir / f"{city}_domain.nc")
     with open(pdir / f"{city}_calibration.json") as f:
         cal = json.load(f)
-    days = pd.read_csv(config.PHASE2_DIR / city / f"{city}_phase3_days.csv", parse_dates=["date"])
-    bg_days = pd.read_csv(config.output_dir(city, "calibration") / "daily_background.csv",
+    days = pd.read_csv(config.P2_DIR / city / f"{city}_phase3_days.csv", parse_dates=["date"])
+    bgdays = pd.read_csv(config.output_dir(city, "calibration") / "daily_background.csv",
                           parse_dates=["date"])
-    days = days.merge(bg_days[["date", "background_ug_m3"]], on="date", how="left")
+    days = days.merge(bgdays[["date", "background_ug_m3"]], on="date", how="left")
     assert days["background_ug_m3"].notna().all()
 
     cand = pd.read_csv(pdir / f"{city}_candidates.csv")
@@ -55,39 +55,39 @@ def generate(city):
     lam = 0.0 if cal["loss_efold_hours"] is None else 1 / (cal["loss_efold_hours"] * 3600)
     base = cal["alpha_ug_per_s_per_person"] * pop               # ug/s per cell
 
-    n_mem = 1 + config.N_SYNTHETIC
+    nmem = 1 + config.N_SYNTH
     D, H, C = len(days), 24, len(cand)
-    local = np.empty((D, n_mem, H, C), dtype=np.float32)
-    bg_resp = np.empty((D, H, C), dtype=np.float32)
-    emission = np.empty((D, n_mem, ny, nx), dtype=np.float32)
-    n_points = np.zeros((D, n_mem), dtype=np.int16)
+    local = np.empty((D, nmem, H, C), dtype=np.float32)
+    bgresp = np.empty((D, H, C), dtype=np.float32)
+    emission = np.empty((D, nmem, ny, nx), dtype=np.float32)
+    npoints = np.zeros((D, nmem), dtype=np.int16)
 
     for d, row in days.iterrows():
-        emis = np.empty((n_mem, ny, nx))
+        emis = np.empty((nmem, ny, nx))
         emis[0] = base
-        for m in range(1, n_mem):
-            rng = np.random.default_rng([config.RANDOM_SEED, d, m])
-            emis[m], n_points[d, m] = synthetic_emissions(base, land, rng)
+        for m in range(1, nmem):
+            rng = np.random.default_rng([config.SEED, d, m])
+            emis[m], npoints[d, m] = synthetic_emissions(base, land, rng)
         emission[d] = emis
         flux = np.concatenate([emis, np.zeros((1, ny, nx))]) / dx**2   # ug m-2 s-1
-        bgv = np.r_[np.zeros(n_mem), 1.0]
+        bgv = np.r_[np.zeros(nmem), 1.0]
         c0 = bgv[:, None, None] * np.ones((1, ny, nx))
 
-        utc_start = (row["date"] - pd.Timedelta(hours=cfg["utc_offset_hours"])
-                     - pd.Timedelta(hours=SPINUP_HOURS))
-        utc_end = utc_start + pd.Timedelta(hours=SPINUP_HOURS + H)
-        met = transport.load_met(city, config.PHASE2_DIR, utc_start, utc_end)
+        utcstart = (row["date"] - pd.Timedelta(hours=cfg["utc_offset_hours"])
+                     - pd.Timedelta(hours=SPINUP_HRS))
+        utcend = utcstart + pd.Timedelta(hours=SPINUP_HRS + H)
+        met = transport.load_met(city, config.P2_DIR, utcstart, utcend)
         fields = transport.met_to_domain(met, domain)
-        r = transport.run(fields, dx, flux, np.full(n_mem + 1, lam), K, bgv, c0,
-                          sample_cells=cells)
-        s = r["samples"][SPINUP_HOURS:]                 
-        local[d] = s[:, :n_mem].transpose(1, 0, 2)
-        bg_resp[d] = s[:, n_mem]
+        r = transport.run(fields, dx, flux, np.full(nmem + 1, lam), K, bgv, c0,
+                          samplecells=cells)
+        s = r["samples"][SPINUP_HRS:]                 
+        local[d] = s[:, :nmem].transpose(1, 0, 2)
+        bgresp[d] = s[:, nmem]
         print(f"  {d + 1}/{D} {row['date'].date()} {row['regime']}", end="\r", flush=True)
     print()
 
     b = days["background_ug_m3"].to_numpy()
-    total = local + (b[:, None, None, None] * bg_resp[:, None]).astype(np.float32)
+    total = local + (b[:, None, None, None] * bgresp[:, None]).astype(np.float32)
 
     ds = xr.Dataset(
         {
@@ -95,10 +95,10 @@ def generate(city):
                      {"units": "ug m-3", "description": "local + background"}),
             "local_pm25": (("day", "member", "hour", "cell"), local,
                            {"units": "ug m-3", "description": "emission-driven part"}),
-            "background_response": (("day", "hour", "cell"), bg_resp,
+            "background_response": (("day", "hour", "cell"), bgresp,
                                     {"description": "response to unit background"}),
             "emission": (("day", "member", "y", "x"), emission, {"units": "ug s-1 per cell"}),
-            "n_point_sources": (("day", "member"), n_points),
+            "n_point_sources": (("day", "member"), npoints),
             "background": ("day", b, {"units": "ug m-3", "source": "03_calibrate.py"}),
             "date": ("day", days["date"].to_numpy()),
             "regime": ("day", days["regime"].to_numpy().astype(str)),
@@ -109,7 +109,7 @@ def generate(city):
             "cell_x": ("cell", cand["x"].to_numpy()),
             "cell_y": ("cell", cand["y"].to_numpy()),
         },
-        coords={"day": np.arange(D), "member": np.arange(n_mem), "hour": np.arange(H),
+        coords={"day": np.arange(D), "member": np.arange(nmem), "hour": np.arange(H),
                 "cell": np.arange(C), "x": domain.x.values, "y": domain.y.values},
         attrs={
             "city": city, "crs": cfg["crs"], "K_m2_s": K,
@@ -117,12 +117,12 @@ def generate(city):
             "alpha_ug_per_s_per_person": cal["alpha_ug_per_s_per_person"],
             "member_0": "base (calibrated population emissions)",
             "hour": "local standard time, hour-start; value = mean over that hour",
-            "n_synthetic": config.N_SYNTHETIC,
-            "synth_area_sigma": config.SYNTH_AREA_SIGMA,
-            "synth_point_mean_count": config.SYNTH_POINT_MEAN_COUNT,
-            "synth_point_share": config.SYNTH_POINT_SHARE,
-            "synth_point_sigma": config.SYNTH_POINT_SIGMA,
-            "random_seed": config.RANDOM_SEED,
+            "n_synthetic": config.N_SYNTH,
+            "synth_area_sigma": config.SYN_AREA_SIG,
+            "synth_point_mean_count": config.SYN_PT_COUNT,
+            "synth_point_share": config.SYN_PT_SHARE,
+            "synth_point_sigma": config.SYN_PT_SIG,
+            "random_seed": config.SEED,
         },
     )
     path = pdir / f"{city}_scenarios.nc"
@@ -141,9 +141,9 @@ def summarize(city, ds):
           f"synthetic {float(daily.sel(member=slice(1, None)).mean()):.2f} ug/m3")
     print(f"  spatial SD across cells (daily means): base {float(spatial_sd.sel(member=0).mean()):.2f}, "
           f"synthetic {float(spatial_sd.sel(member=slice(1, None)).mean()):.2f} ug/m3")
-    by_regime = spatial_sd.sel(member=0).groupby(ds["regime"]).mean()
+    byregime = spatial_sd.sel(member=0).groupby(ds["regime"]).mean()
     print("  base spatial SD by regime:", {str(k): round(float(v), 2)
-                                           for k, v in zip(by_regime["regime"].values, by_regime.values)})
+                                           for k, v in zip(byregime["regime"].values, byregime.values)})
 
 
 def plot_examples(city, ds, domain):

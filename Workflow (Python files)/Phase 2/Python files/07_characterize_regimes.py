@@ -12,7 +12,7 @@ import config
 import utils
 
 
-BLOCK_LABELS = {
+BLOCK_LABS = {
     1: "00-06",
     2: "06-12",
     3: "12-18",
@@ -32,22 +32,22 @@ def characterize(city):
         parse_dates=["date"],
     )
 
-    for block in range(1, config.N_BLOCKS + 1):
+    for block in range(1, config.NBLOCKS + 1):
         daily[f"speed{block}"] = np.hypot(
             daily[f"u{block}"], daily[f"v{block}"]
         )
 
-    speed_cols = [
-        f"speed{b}" for b in range(1, config.N_BLOCKS + 1)
+    speedcols = [
+        f"speed{b}" for b in range(1, config.NBLOCKS + 1)
     ]
 
-    daily["mean_wind_speed"] = daily[speed_cols].mean(axis=1)
+    daily["mean_wind_speed"] = daily[speedcols].mean(axis=1)
 
-    u_cols = [f"u{b}" for b in range(1, config.N_BLOCKS + 1)]
-    v_cols = [f"v{b}" for b in range(1, config.N_BLOCKS + 1)]
+    ucols = [f"u{b}" for b in range(1, config.NBLOCKS + 1)]
+    vcols = [f"v{b}" for b in range(1, config.NBLOCKS + 1)]
 
-    daily["u_daily"] = daily[u_cols].mean(axis=1)
-    daily["v_daily"] = daily[v_cols].mean(axis=1)
+    daily["u_daily"] = daily[ucols].mean(axis=1)
+    daily["v_daily"] = daily[vcols].mean(axis=1)
 
     daily["vector_mean_speed"] = np.hypot(
         daily["u_daily"], daily["v_daily"]
@@ -67,7 +67,7 @@ def characterize(city):
         "std_pblh": ("pblh_mean", "std"),
     }
 
-    for block in range(1, config.N_BLOCKS + 1):
+    for block in range(1, config.NBLOCKS + 1):
         agg[f"u{block}"] = (f"u{block}", "mean")
         agg[f"v{block}"] = (f"v{block}", "mean")
 
@@ -127,7 +127,7 @@ def characterize(city):
 
         row = summary[summary["regime"] == regime].iloc[0]
 
-        for block in range(1, config.N_BLOCKS + 1):
+        for block in range(1, config.NBLOCKS + 1):
             ax.arrow(
                 0, 0,
                 row[f"u{block}"], row[f"v{block}"],
@@ -136,7 +136,7 @@ def characterize(city):
                 alpha=0.85,
             )
             ax.annotate(
-                BLOCK_LABELS[block],
+                BLOCK_LABS[block],
                 (row[f"u{block}"], row[f"v{block}"]),
                 fontsize=7,
             )

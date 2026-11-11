@@ -39,7 +39,7 @@ _spec = importlib.util.spec_from_file_location("cfg4", P4 / "config.py")
 cfg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cfg)
 
-N_VALUES = {"singapore": [8, 22, 40], "melbourne": [8, 22, 32, 40, 88]}
+NVALS = {"singapore": [8, 22, 40], "melbourne": [8, 22, 32, 40, 88]}
 LAND = {"singapore": ("boundaries/singapore/MasterPlan2025PlanningAreaBoundaryNoSea.geojson", "EPSG:3414"),
         "melbourne": ("boundaries/melbourne/lga_polygon/lga_polygon.shp", "EPSG:7855")}
 
@@ -58,18 +58,18 @@ def nn_stats(xy):
 
 
 def run(city):
-    cand = pd.read_csv(cfg.PHASE3_DIR / city / f"{city}_candidates.csv").sort_values("id").reset_index(drop=True)
+    cand = pd.read_csv(cfg.P3_DIR / city / f"{city}_candidates.csv").sort_values("id").reset_index(drop=True)
     nets = pd.read_csv(cfg.processed_dir(city) / f"{city}_networks_trainall.csv")
     coast = coastline(city)
-    coast_km = np.array([coast.distance(Point(x, y)) / 1000 for x, y in zip(cand["x"], cand["y"])])
-    rows = [(city, "all candidate cells", len(cand), np.nan, np.nan, coast_km.mean())]
-    label = f"f{cfg.HEADLINE_NOISE_FRACTION:g}"
+    coastkm = np.array([coast.distance(Point(x, y)) / 1000 for x, y in zip(cand["x"], cand["y"])])
+    rows = [(city, "all candidate cells", len(cand), np.nan, np.nan, coastkm.mean())]
+    label = f"f{cfg.MAIN_NOISE:g}"
     for strategy, noise in (("greedy", label), ("kmeans", "any"), ("existing", "any")):
         sub = nets[(nets["strategy"] == strategy) & (nets["noise"] == noise)]
-        for n in sorted(set(sub["N"]) & set(N_VALUES[city] + ([8] if strategy == "existing" else []))):
+        for n in sorted(set(sub["N"]) & set(NVALS[city] + ([8] if strategy == "existing" else []))):
             idx = sub[sub["N"] == n].sort_values("rank")["cell_index"].to_numpy()
-            mean_nn, cv_nn = nn_stats(cand[["x", "y"]].to_numpy()[idx])
-            rows.append((city, strategy, n, mean_nn, cv_nn, coast_km[idx].mean()))
+            meannn, cvnn = nn_stats(cand[["x", "y"]].to_numpy()[idx])
+            rows.append((city, strategy, n, meannn, cvnn, coastkm[idx].mean()))
     return pd.DataFrame(rows, columns=["city", "network", "N", "nn_mean_km", "nn_cv", "coast_mean_km"])
 
 

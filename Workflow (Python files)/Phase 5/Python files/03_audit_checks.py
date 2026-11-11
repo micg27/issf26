@@ -45,7 +45,7 @@ def load(name, path):
 cfg4 = load("cfg4", P4 / "config.py")
 sys.path.insert(0, str(P3))
 transport = load("transport", P3 / "transport.py")
-PH3 = cfg4.PHASE3_DIR
+PH3 = cfg4.P3_DIR
 
 
 def check_A_B(city):
@@ -62,7 +62,7 @@ def check_A_B(city):
 
 def check_D(city):
     dom = xr.open_dataset(PH3 / city / f"{city}_domain.nc")
-    met = transport.load_met(city, cfg4.phase3.PHASE2_DIR, pd.Timestamp("2023-01-01"), pd.Timestamp("2023-12-31 23:00"))
+    met = transport.load_met(city, cfg4.phase3.P2_DIR, pd.Timestamp("2023-01-01"), pd.Timestamp("2023-12-31 23:00"))
     f = transport.met_to_domain(met, dom)
     speed = np.hypot(f["u10"], f["v10"]).mean()
     spread = (f["u10"].std(axis=(1, 2)) + f["v10"].std(axis=(1, 2))).mean()
@@ -83,8 +83,8 @@ def check_M(city, days):
         for spin in (24, 72):
             start = pd.Timestamp(day) - pd.Timedelta(hours=off + spin)
             f = transport.met_to_domain(
-                transport.load_met(city, cfg4.phase3.PHASE2_DIR, start, start + pd.Timedelta(hours=spin + 24)), dom)
-            r = transport.run(f, 2000.0, flux, [0.0], cal["K_m2_s"], [0.0], np.zeros_like(flux), sample_cells=cells)
+                transport.load_met(city, cfg4.phase3.P2_DIR, start, start + pd.Timedelta(hours=spin + 24)), dom)
+            r = transport.run(f, 2000.0, flux, [0.0], cal["K_m2_s"], [0.0], np.zeros_like(flux), samplecells=cells)
             res[spin] = r["samples"][spin:, 0].mean(axis=0)
         print(f"  M {day}: 72 h vs 24 h spin-up mean change {100 * (res[72].mean() / res[24].mean() - 1):+.1f}%, "
               f"pattern r = {np.corrcoef(res[24], res[72])[0, 1]:.3f}")
@@ -101,7 +101,7 @@ def check_X(city):
     week = pd.to_datetime(meta["date"]).dt.isocalendar().week.to_numpy()
     rows = {k: np.nonzero(week == k)[0] for k in np.unique(week)}
     weeks = np.array(list(rows))
-    n = cfg4.HEADLINE_N[city]
+    n = cfg4.MAIN_N[city]
 
     def mse(strategy, noise):
         S = nets[(nets.strategy == strategy) & (nets.noise == noise) & (nets.N == n)].sort_values("rank").cell_index.tolist()

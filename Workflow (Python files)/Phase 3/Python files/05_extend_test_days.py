@@ -43,14 +43,14 @@ def observed_daily_mean(city, dates):
     return daily.reindex(pd.DatetimeIndex(dates)).to_numpy()
 
 
-def extend(city, period, k_override=None):
+def extend(city, period, koverride=None):
     print(f"=== {city}")
     cfg = config.city_config(city)
     pdir = config.processed_dir(city)
     domain = xr.open_dataset(pdir / f"{city}_domain.nc")
     cal = json.load(open(pdir / f"{city}_calibration.json"))
-    regimes = pd.read_csv(config.PHASE2_DIR / city / f"{city}_regimes_split.csv", parse_dates=["date"])
-    weights = json.load(open(config.PHASE2_DIR / city / f"{city}_regime_weights.json"))["weights"]
+    regimes = pd.read_csv(config.P2_DIR / city / f"{city}_regimes_split.csv", parse_dates=["date"])
+    weights = json.load(open(config.P2_DIR / city / f"{city}_regime_weights.json"))["weights"]
     if period == "test2025":
         days = regimes[regimes["date"].dt.year == YEAR]
         assert (days["split"] == "test").all()
@@ -60,14 +60,14 @@ def extend(city, period, k_override=None):
     days = days[["date", "regime", "split"]].reset_index(drop=True)
     # weather record starts 1 Jan 2021 00:00 UTC, but their 24h spin-up
     # starts before that can't be simulated the same way, so skip them
-    first_utc = pd.Timestamp(f"{config.phase2.START_YEAR}-01-01")
-    spin_start = (days["date"] - pd.Timedelta(hours=cfg["utc_offset_hours"])
-                  - pd.Timedelta(hours=gen.SPINUP_HOURS))
-    too_early = spin_start < first_utc
-    if too_early.any():
-        print(f"  skipping {too_early.sum()} day(s) with no spin-up weather: "
-              f"{[str(d.date()) for d in days.loc[too_early, 'date']]}")
-    days = days[~too_early].reset_index(drop=True)
+    firstutc = pd.Timestamp(f"{config.phase2.START_YR}-01-01")
+    spinstart = (days["date"] - pd.Timedelta(hours=cfg["utc_offset_hours"])
+                  - pd.Timedelta(hours=gen.SPINUP_HRS))
+    tooearly = spinstart < firstutc
+    if tooearly.any():
+        print(f"  skipping {tooearly.sum()} day(s) with no spin-up weather: "
+              f"{[str(d.date()) for d in days.loc[tooearly, 'date']]}")
+    days = days[~tooearly].reset_index(drop=True)
     days["w_k"] = days["regime"].map(weights)
 
     cand = pd.read_csv(pdir / f"{city}_candidates.csv")
@@ -76,43 +76,43 @@ def extend(city, period, k_override=None):
     pop = domain["population"].values
     land = domain["land"].values.astype(bool)
     ny, nx = pop.shape
-    K = cal["K_m2_s"] if k_override is None else k_override
+    K = cal["K_m2_s"] if koverride is None else koverride
     lam = 0.0 if cal["loss_efold_hours"] is None else 1 / (cal["loss_efold_hours"] * 3600)
     base = cal["alpha_ug_per_s_per_person"] * pop
 
-    n_mem = 1 + config.N_SYNTHETIC
+    nmem = 1 + config.N_SYNTH
     D, H, C = len(days), 24, len(cand)
-    local = np.empty((D, n_mem, C), dtype=np.float32)
-    bg_resp = np.empty((D, C), dtype=np.float32)
-    totals = np.empty((D, n_mem), dtype=np.float32)
+    local = np.empty((D, nmem, C), dtype=np.float32)
+    bgresp = np.empty((D, C), dtype=np.float32)
+    totals = np.empty((D, nmem), dtype=np.float32)
 
     for d, row in days.iterrows():
-        emis = np.empty((n_mem, ny, nx))
+        emis = np.empty((nmem, ny, nx))
         emis[0] = base
-        for m in range(1, n_mem):
-            rng = np.random.default_rng([config.RANDOM_SEED, row["date"].year,
+        for m in range(1, nmem):
+            rng = np.random.default_rng([config.SEED, row["date"].year,
                                          row["date"].dayofyear, m])
             emis[m], _ = gen.synthetic_emissions(base, land, rng)
         totals[d] = emis.sum(axis=(1, 2))
 
         flux = np.concatenate([emis, np.zeros((1, ny, nx))]) / dx**2
-        bgv = np.r_[np.zeros(n_mem), 1.0]
+        bgv = np.r_[np.zeros(nmem), 1.0]
         c0 = bgv[:, None, None] * np.ones((1, ny, nx))
-        utc_start = (row["date"] - pd.Timedelta(hours=cfg["utc_offset_hours"])
-                     - pd.Timedelta(hours=gen.SPINUP_HOURS))
-        utc_end = utc_start + pd.Timedelta(hours=gen.SPINUP_HOURS + H)
-        met = transport.load_met(city, config.PHASE2_DIR, utc_start, utc_end)
+        utcstart = (row["date"] - pd.Timedelta(hours=cfg["utc_offset_hours"])
+                     - pd.Timedelta(hours=gen.SPINUP_HRS))
+        utcend = utcstart + pd.Timedelta(hours=gen.SPINUP_HRS + H)
+        met = transport.load_met(city, config.P2_DIR, utcstart, utcend)
         fields = transport.met_to_domain(met, domain)
-        r = transport.run(fields, dx, flux, np.full(n_mem + 1, lam), K, bgv, c0, sample_cells=cells)
-        s = r["samples"][gen.SPINUP_HOURS:].mean(axis=0)         
-        local[d] = s[:n_mem]
-        bg_resp[d] = s[n_mem]
+        r = transport.run(fields, dx, flux, np.full(nmem + 1, lam), K, bgv, c0, samplecells=cells)
+        s = r["samples"][gen.SPINUP_HRS:].mean(axis=0)         
+        local[d] = s[:nmem]
+        bgresp[d] = s[nmem]
         print(f"  {d + 1}/{D} {row['date'].date()} {row['regime']}", end="\r", flush=True)
     print()
 
     b = observed_daily_mean(city, days["date"])
     b = np.where(np.isfinite(b), b, np.nanmean(b))
-    total = local + (b[:, None, None] * bg_resp[:, None, :]).astype(np.float32)
+    total = local + (b[:, None, None] * bgresp[:, None, :]).astype(np.float32)
 
     ds = xr.Dataset(
         {
@@ -131,13 +131,13 @@ def extend(city, period, k_override=None):
             "cell_y": ("cell", cand["y"].to_numpy()),
         },
         attrs={"city": city, "extension": f"every {period} day (post-results, see docstring)",
-               "seed": f"[{config.RANDOM_SEED}, year, day_of_year, member]",
+               "seed": f"[{config.SEED}, year, day_of_year, member]",
                "K_m2_s": K, "alpha_ug_per_s_per_person": cal["alpha_ug_per_s_per_person"]},
     )
-    path = pdir / f"{city}_scenarios_{PERIODS[period]}{k_tag(k_override)}.nc"
+    path = pdir / f"{city}_scenarios_{PERIODS[period]}{k_tag(koverride)}.nc"
     ds.to_netcdf(path, encoding={v: {"zlib": True, "complevel": 4}
                                  for v in ("local_pm25_daily", "pm25_daily")})
-    print(f"  wrote {path} ({D} days x {n_mem} members)")
+    print(f"  wrote {path} ({D} days x {nmem} members)")
 
 
 if __name__ == "__main__":

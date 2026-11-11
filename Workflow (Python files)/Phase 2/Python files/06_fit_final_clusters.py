@@ -16,9 +16,9 @@ def fit(city):
 
     cfg = config.city_config(city)
 
-    final_k = cfg["final_k"]
+    finalk = cfg["final_k"]
 
-    if final_k is None:
+    if finalk is None:
         raise ValueError(
             f"config.CITIES['{city}']['final_k'] is None.\n"
             f"Run 05_cluster_sweep.py, inspect the diagnostics, then set "
@@ -38,9 +38,9 @@ def fit(city):
     Z = scaler.fit_transform(X)
 
     model = KMeans(
-        n_clusters=final_k,
-        n_init=config.KMEANS_N_INIT,
-        random_state=config.RANDOM_SEED,
+        n_clusters=finalk,
+        n_init=config.KMEANS_INIT,
+        random_state=config.SEED,
     )
 
     labels = model.fit_predict(Z)
@@ -54,21 +54,21 @@ def fit(city):
 
     remap = {old: new for new, old in enumerate(order)}
 
-    cluster_index = np.array([remap[label] for label in labels])
+    clusteridx = np.array([remap[label] for label in labels])
 
     centers = model.cluster_centers_[order]
 
     prefix = cfg["label_prefix"]
 
-    daily["cluster_index"] = cluster_index
-    daily["regime"] = [f"{prefix}{i + 1}" for i in cluster_index]
+    daily["cluster_index"] = clusteridx
+    daily["regime"] = [f"{prefix}{i + 1}" for i in clusteridx]
 
     daily.to_csv(base / f"{city}_regimes.csv", index=False)
 
     centroids = pd.DataFrame(centers, columns=config.FEATURES)
-    centroids.insert(0, "cluster_index", range(final_k))
+    centroids.insert(0, "cluster_index", range(finalk))
     centroids.insert(
-        1, "regime", [f"{prefix}{i + 1}" for i in range(final_k)]
+        1, "regime", [f"{prefix}{i + 1}" for i in range(finalk)]
     )
 
     centroids.to_csv(
@@ -80,9 +80,9 @@ def fit(city):
         scaler.inverse_transform(centers),
         columns=config.FEATURES,
     )
-    physical.insert(0, "cluster_index", range(final_k))
+    physical.insert(0, "cluster_index", range(finalk))
     physical.insert(
-        1, "regime", [f"{prefix}{i + 1}" for i in range(final_k)]
+        1, "regime", [f"{prefix}{i + 1}" for i in range(finalk)]
     )
 
     physical.to_csv(
@@ -96,8 +96,8 @@ def fit(city):
                 "features": config.FEATURES,
                 "mean": scaler.mean_.tolist(),
                 "scale": scaler.scale_.tolist(),
-                "k": final_k,
-                "random_seed": config.RANDOM_SEED,
+                "k": finalk,
+                "random_seed": config.SEED,
                 "inertia": float(model.inertia_),
             },
             f,
@@ -106,7 +106,7 @@ def fit(city):
 
     counts = daily["regime"].value_counts().sort_index()
 
-    print(f"\n  k = {final_k}, n = {len(daily)} days\n")
+    print(f"\n  k = {finalk}, n = {len(daily)} days\n")
     print("  regime   days    w_k")
 
     for regime, n in counts.items():

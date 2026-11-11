@@ -6,11 +6,11 @@ from shapely.geometry import MultiPolygon, Polygon
 from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[3]
-BOUNDARIES = ROOT / "data" / "raw" / "boundaries" / "melbourne"
-OUT = BOUNDARIES / "UGB_polygon.gpkg"
+BOUNDS = ROOT / "data" / "raw" / "boundaries" / "melbourne"
+OUT = BOUNDS / "UGB_polygon.gpkg"
 CRS = "EPSG:7855"
 
-METRO_LGAS = [
+METRO_LGA = [
     "BANYULE", "BAYSIDE", "BOROONDARA", "BRIMBANK", "CARDINIA", "CASEY",
     "DAREBIN", "FRANKSTON", "GLEN EIRA", "GREATER DANDENONG", "HOBSONS BAY",
     "HUME", "KINGSTON", "KNOX", "MANNINGHAM", "MARIBYRNONG", "MAROONDAH",
@@ -19,14 +19,14 @@ METRO_LGAS = [
     "WHITEHORSE", "WHITTLESEA", "WYNDHAM", "YARRA", "YARRA RANGES",
 ]
 
-OPENING_M = 10
-MIN_AREA_M2 = 100_000
-EDGE_TOL_M = 5
-REVIEW_THRESHOLD = 0.5
+OPEN_M = 10
+MIN_AREA = 100_000
+EDGE_TOL = 5
+REVIEW_THRESH = 0.5
 
 
 def load(name):
-    gdf = gpd.read_file(BOUNDARIES / name / f"{name}.shp")
+    gdf = gpd.read_file(BOUNDS / name / f"{name}.shp")
     assert gdf.crs.to_epsg() == 7855, f"{name} is {gdf.crs}, expected EPSG:7855"
     gdf["geometry"] = gdf.geometry.make_valid()
     return gdf
@@ -37,7 +37,7 @@ def parts_of(geom):
 
 
 def fill_small_holes(poly):
-    holes = [h for h in poly.interiors if Polygon(h).area >= MIN_AREA_M2]
+    holes = [h for h in poly.interiors if Polygon(h).area >= MIN_AREA]
     return Polygon(poly.exterior, holes)
 
 
@@ -46,37 +46,37 @@ def main():
     uga = load("plan_uga")
     print("PLAN_UGA zone codes:", uga["zone_code"].value_counts().to_dict())
     outside = uga[uga["zone_code"] == "UGBA"]
-    ugb_lines = load("plan_ugb")
+    ugblines = load("plan_ugb")
 
-    missing = set(METRO_LGAS) - set(lga["lga_name"])
+    missing = set(METRO_LGA) - set(lga["lga_name"])
     assert not missing, f"LGA names not found: {missing}"
-    metro_lga = lga[lga["lga_name"].isin(METRO_LGAS)]
-    metro = unary_union(metro_lga.geometry)
+    metrolga = lga[lga["lga_name"].isin(METRO_LGA)]
+    metro = unary_union(metrolga.geometry)
 
     raw = metro.difference(unary_union(outside.geometry))
     print(f"raw difference: {raw.area / 1e6:.0f} km2 in {len(parts_of(raw))} parts")
 
-    opened = (raw.buffer(-OPENING_M, join_style="mitre")
-                 .buffer(OPENING_M, join_style="mitre"))
+    opened = (raw.buffer(-OPEN_M, join_style="mitre")
+                 .buffer(OPEN_M, join_style="mitre"))
     kept = [fill_small_holes(p) for p in parts_of(opened)
-            if p.geom_type == "Polygon" and p.area >= MIN_AREA_M2]
+            if p.geom_type == "Polygon" and p.area >= MIN_AREA]
     clean = MultiPolygon(sorted(kept, key=lambda p: -p.area))
     print(f"cleaned:        {clean.area / 1e6:.0f} km2 in {len(kept)} parts")
 
-    ugb_zone = unary_union(ugb_lines.geometry).buffer(EDGE_TOL_M)
-    metro_edge_zone = metro.boundary.buffer(EDGE_TOL_M)
+    ugbzone = unary_union(ugblines.geometry).buffer(EDGE_TOL)
+    edgezone = metro.boundary.buffer(EDGE_TOL)
     rows = []
     for p in clean.geoms:
-        on_ugb = p.exterior.intersection(ugb_zone).length / p.exterior.length
-        on_edge = p.exterior.intersection(metro_edge_zone).length / p.exterior.length
-        if on_ugb + on_edge < REVIEW_THRESHOLD:
+        onugb = p.exterior.intersection(ugbzone).length / p.exterior.length
+        onedge = p.exterior.intersection(edgezone).length / p.exterior.length
+        if onugb + onedge < REVIEW_THRESH:
             pt = p.representative_point()
-            lga_name = metro_lga[metro_lga.contains(pt)]["lga_name"].tolist()
+            lganame = metrolga[metrolga.contains(pt)]["lga_name"].tolist()
             rows.append({
                 "area_km2": round(p.area / 1e6, 2),
-                "lga": ", ".join(lga_name),
-                "pct_edge_on_ugb": round(on_ugb * 100),
-                "pct_edge_on_metro_edge": round(on_edge * 100),
+                "lga": ", ".join(lganame),
+                "pct_edge_on_ugb": round(onugb * 100),
+                "pct_edge_on_metro_edge": round(onedge * 100),
                 "geometry": p,
             })
     review = gpd.GeoDataFrame(rows, geometry="geometry", crs=CRS)

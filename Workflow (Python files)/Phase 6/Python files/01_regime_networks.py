@@ -55,21 +55,21 @@ cfg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cfg)
 
 N_BOOT = 2000
-N_VALUES = {"singapore": [8, 22, 40], "melbourne": [8, 22, 32, 40, 88]}
+NVALS = {"singapore": [8, 22, 40], "melbourne": [8, 22, 32, 40, 88]}
 AREA_KM2 = {"singapore": 655.3, "melbourne": 2611.2}       # Phase 1 candidate land area
 PAIRS = {"equal_count_N8": (8, 8), "equal_count_N22": (22, 22), "equal_count_N40": (40, 40),
          "equal_density_SG8_MEL32": (8, 32), "equal_density_SG22_MEL88": (22, 88)}
 
 
 def maps_original(city):
-    m = N.load_maps(city, test_set="all2025", train_set="all")
+    m = N.load_maps(city, testset="all2025", trainset="all")
     return m["cells"], m["train"], m["test"]
 
 
 def maps_L0(city, cells):
     out = []
     for period in ("train", "test2025"):
-        ds = xr.open_dataset(cfg.PHASE3_DIR / city / f"{city}_ingredients_{period}.nc")
+        ds = xr.open_dataset(cfg.P3_DIR / city / f"{city}_ingredients_{period}.nc")
         meta = pd.DataFrame({"day": np.arange(ds.sizes["day"]), "member": 0,
                              "date": ds["date"].values, "regime": ds["regime"].values.astype(str),
                              "w_k": ds["w_k"].values})
@@ -88,8 +88,8 @@ def nearest_distance_ratio(cells, A, B, n, area):
     xy = cells[["x", "y"]].to_numpy() / 1000
     a, b = xy[A], xy[B]
     d = np.hypot(a[:, None, 0] - b[None, :, 0], a[:, None, 1] - b[None, :, 1])
-    mean_d = 0.5 * (d.min(axis=1).mean() + d.min(axis=0).mean())
-    return mean_d / np.sqrt(area / n)
+    meand = 0.5 * (d.min(axis=1).mean() + d.min(axis=0).mean())
+    return meand / np.sqrt(area / n)
 
 
 def boot_days(meta, rng):
@@ -102,28 +102,28 @@ def boot_days(meta, rng):
 def analyse(city, setting, cells, train, test):
     regimes = sorted(train["meta"]["regime"].unique())
     w_k = train["meta"].groupby("regime")["w_k"].first().to_dict()
-    Sigma_all = N.second_moment(train["X"], train["w"])
-    vg = N.fit_variogram(cells, Sigma_all)
+    Sigmaall = N.second_moment(train["X"], train["w"])
+    vg = N.fit_variogram(cells, Sigmaall)
     K = N.covariance(cells, vg)
-    sd = cfg.HEADLINE_NOISE_FRACTION * N.spatial_sd(train["X"], train["w"])
-    n_max = max(N_VALUES[city])
+    sd = cfg.MAIN_NOISE * N.spatial_sd(train["X"], train["w"])
+    nmax = max(NVALS[city])
 
-    orders = {"all": N.greedy_rmse(K, Sigma_all, vg, sd**2, n_max)[0]}
+    orders = {"all": N.greedy_rmse(K, Sigmaall, vg, sd**2, nmax)[0]}
     for r in regimes:
         Xr, wr, _ = regime_subset(train, r)
-        orders[r] = N.greedy_rmse(K, N.second_moment(Xr, wr), vg, sd**2, n_max)[0]
+        orders[r] = N.greedy_rmse(K, N.second_moment(Xr, wr), vg, sd**2, nmax)[0]
 
-    rng = np.random.default_rng([cfg.RANDOM_SEED, 6, len(city), len(setting)])
-    test_by_r = {r: regime_subset(test, r) for r in regimes}
-    boots = {r: boot_days(test_by_r[r][2], rng) for r in regimes}
+    rng = np.random.default_rng([cfg.SEED, 6, len(city), len(setting)])
+    testbyr = {r: regime_subset(test, r) for r in regimes}
+    boots = {r: boot_days(testbyr[r][2], rng) for r in regimes}
 
     out = {"regimes": regimes, "w_k": w_k, "noise_sd": sd, "budgets": {}}
     draws = {}
-    for n in N_VALUES[city]:
+    for n in NVALS[city]:
         nets = {k: v[:n] for k, v in orders.items()}
         W = {k: N.ok_weights(K, S, N.sensor_variance(vg, sd**2)) for k, S in nets.items()}
         # per-map MSE of every network on every regime's test maps
-        mse = {(j, k): N.map_mse(test_by_r[k][0], nets[j], W[j], sd**2)
+        mse = {(j, k): N.map_mse(testbyr[k][0], nets[j], W[j], sd**2)
                for j in nets for k in regimes}
 
         def penalties(idx):

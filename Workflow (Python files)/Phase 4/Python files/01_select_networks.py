@@ -42,7 +42,7 @@ import config
 import networks as N
 
 
-TRAIN_SET = "selected"
+TRAINSET = "selected"
 SUFFIX = ""
 K_TAG = ""      # Phase 8: e.g. "_K200" reads/writes the K-sensitivity files
 
@@ -61,16 +61,16 @@ def parse_args():
     return (config.ALL_CITIES if a.all else [a.city]), a.train_set, a.k
 
 
-def noise_levels(sigma_city):
+def noise_levels(sigmacity):
     """label -> noise SD (ug/m3)."""
-    levels = {f"f{f:g}": f * sigma_city for f in config.NOISE_FRACTIONS}
-    levels[f"abs{config.ABSOLUTE_NOISE_UG_M3:g}"] = config.ABSOLUTE_NOISE_UG_M3
+    levels = {f"f{f:g}": f * sigmacity for f in config.NOISE_FRACS}
+    levels[f"abs{config.ABS_NOISE:g}"] = config.ABS_NOISE
     return levels
 
 
 def existing_network(city, cells):
     """Melbourne's 2025 in-domain PM2.5 stations -> nearest candidate cells."""
-    p3 = config.PHASE3_DIR / city
+    p3 = config.P3_DIR / city
     st = pd.read_csv(p3 / f"{city}_pm25_stations.csv")
     obs = pd.read_csv(p3 / f"{city}_pm25_hourly.csv", parse_dates=["time_local"])
     active = obs[obs["time_local"].dt.year == 2025]["station"].unique()
@@ -86,17 +86,17 @@ def existing_network(city, cells):
 
 def select(city):
     print(f"=== {city}")
-    maps = (N.load_maps(city, test_set="all2025", train_set=TRAIN_SET, k_tag=K_TAG) if K_TAG
-            else N.load_maps(city, train_set=TRAIN_SET))
+    maps = (N.load_maps(city, testset="all2025", trainset=TRAINSET, k_tag=K_TAG) if K_TAG
+            else N.load_maps(city, trainset=TRAINSET))
     tr, cells = maps["train"], maps["cells"]
     C = len(cells)
     Sigma = N.second_moment(tr["X"], tr["w"])
     vg = N.fit_variogram(cells, Sigma)
     K = N.covariance(cells, vg)
-    sigma_city = N.spatial_sd(tr["X"], tr["w"])
-    levels = noise_levels(sigma_city)
-    n_values = list(range(config.N_MIN, config.N_MAX[city] + 1))
-    print(f"  {C} candidates, {len(tr['X'])} training maps, sigma_city {sigma_city:.3f} ug/m3")
+    sigmacity = N.spatial_sd(tr["X"], tr["w"])
+    levels = noise_levels(sigmacity)
+    nvalues = list(range(config.N_MIN, config.N_MAX[city] + 1))
+    print(f"  {C} candidates, {len(tr['X'])} training maps, sigma_city {sigmacity:.3f} ug/m3")
     print(f"  variogram: nugget {vg['nugget']:.2e}, sill {vg['sill']:.3e}, "
           f"range {vg['range_m'] / 1000:.1f} km")
 
@@ -108,15 +108,15 @@ def select(city):
 
     for label, sd in levels.items():
         order, hist = N.greedy_rmse(K, Sigma, vg, sd**2, config.N_MAX[city])
-        for n in n_values:
+        for n in nvalues:
             add("greedy", label, n, order[:n])
-        print(f"  greedy {label:6s} (noise SD {sd:.3f}): train RMSE at N={config.HEADLINE_N[city]} "
-              f"{np.sqrt(hist[config.HEADLINE_N[city] - 1]):.4f}")
+        print(f"  greedy {label:6s} (noise SD {sd:.3f}): train RMSE at N={config.MAIN_N[city]} "
+              f"{np.sqrt(hist[config.MAIN_N[city] - 1]):.4f}")
 
     modes, sv = N.pod_modes(tr["X"], tr["w"])
-    for n in n_values:
+    for n in nvalues:
         add("qr", "any", n, N.qr_network(modes, n))
-        add("kmeans", "any", n, N.kmeans_network(cells, n, config.RANDOM_SEED))
+        add("kmeans", "any", n, N.kmeans_network(cells, n, config.SEED))
 
     existing = []
     if city == "melbourne":
@@ -131,12 +131,12 @@ def select(city):
     out = config.processed_dir(city)
     nets.to_csv(out / f"{city}_networks{SUFFIX}.csv", index=False)
     with open(out / f"{city}_kriging{SUFFIX}.json", "w") as f:
-        json.dump({"variogram": vg, "sigma_city_ug_m3": sigma_city,
+        json.dump({"variogram": vg, "sigma_city_ug_m3": sigmacity,
                    "noise_sd_ug_m3": levels,
                    "pod_energy_first_10": (sv[:10] ** 2 / np.sum(sv**2)).tolist(),
                    "existing_stations": [{"station": s, "cell_index": i, "dist_m": d}
                                          for s, i, d in existing],
-                   "train_set": TRAIN_SET, "n_training_maps": len(tr["X"])}, f, indent=2)
+                   "train_set": TRAINSET, "n_training_maps": len(tr["X"])}, f, indent=2)
 
     training_curves(city, maps, nets, K, vg, levels, modes)
     plot_networks(city, cells, nets)
@@ -146,7 +146,7 @@ def select(city):
 def training_curves(city, maps, nets, K, vg, levels, modes):
     """Training RMSE vs N at the headline noise (selection data, not a result)."""
     tr = maps["train"]
-    label = f"f{config.HEADLINE_NOISE_FRACTION:g}"
+    label = f"f{config.MAIN_NOISE:g}"
     s2 = levels[label] ** 2
     rows = []
     for strat, noise in [("greedy", label), ("qr", "any"), ("kmeans", "any")]:
@@ -163,7 +163,7 @@ def training_curves(city, maps, nets, K, vg, levels, modes):
     fig, ax = plt.subplots(figsize=(6.5, 4))
     for strat, g in curves.groupby("strategy"):
         ax.plot(g["N"], g["train_rmse"], label=strat, ls="--" if strat == "qr_native_pod" else "-")
-    ax.axvline(config.HEADLINE_N[city], color="grey", ls=":", lw=1)
+    ax.axvline(config.MAIN_N[city], color="grey", ls=":", lw=1)
     ax.set_xlabel("number of sensors N")
     ax.set_ylabel("training RMSE (ug/m3)")
     ax.set_ylim(0, 1.5 * curves[curves["strategy"] == "kmeans"]["train_rmse"].max())
@@ -172,13 +172,13 @@ def training_curves(city, maps, nets, K, vg, levels, modes):
     fig.tight_layout()
     fig.savefig(out / f"training_curves{SUFFIX}.png", dpi=130)
     plt.close(fig)
-    hn = curves[curves["N"] == config.HEADLINE_N[city]].set_index("strategy")["train_rmse"]
+    hn = curves[curves["N"] == config.MAIN_N[city]].set_index("strategy")["train_rmse"]
     print("  training RMSE at headline N:", hn.round(4).to_dict())
 
 
 def plot_networks(city, cells, nets):
-    n = config.HEADLINE_N[city]
-    label = f"f{config.HEADLINE_NOISE_FRACTION:g}"
+    n = config.MAIN_N[city]
+    label = f"f{config.MAIN_NOISE:g}"
     panels = [("greedy", label), ("qr", "any"), ("kmeans", "any")]
     if (nets["strategy"] == "existing").any():
         panels.append(("existing", "any"))
@@ -215,8 +215,8 @@ def plot_variogram(city, vg):
 
 
 if __name__ == "__main__":
-    cities, TRAIN_SET, k = parse_args()
+    cities, TRAINSET, k = parse_args()
     K_TAG = "" if k is None else f"_K{k:g}"
-    SUFFIX = ("" if TRAIN_SET == "selected" else "_trainall") + K_TAG
+    SUFFIX = ("" if TRAINSET == "selected" else "_trainall") + K_TAG
     for city in cities:
         select(city)

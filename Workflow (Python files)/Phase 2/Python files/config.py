@@ -1,15 +1,15 @@
 from pathlib import Path
 
-START_YEAR = 2021
-END_YEAR = 2025
+START_YR = 2021
+END_YR = 2025
 
-YEARS = list(range(START_YEAR, END_YEAR + 1))
+YEARS = list(range(START_YR, END_YR + 1))
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJ_ROOT = Path(__file__).resolve().parents[3]
 
-RAW_DIR = PROJECT_ROOT / "data" / "raw" /"meteorology"
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed" / "meteorology"
-OUTPUT_DIR = PROJECT_ROOT / "outputs" / "meteorology"
+RAW_DIR = PROJ_ROOT / "data" / "raw" /"meteorology"
+PROC_DIR = PROJ_ROOT / "data" / "processed" / "meteorology"
+OUTDIR = PROJ_ROOT / "outputs" / "meteorology"
 
 
 def raw_dir(city):
@@ -17,13 +17,13 @@ def raw_dir(city):
 
 
 def processed_dir(city):
-    d = PROCESSED_DIR / city
+    d = PROC_DIR / city
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def output_dir(city, subfolder=None):
-    d = OUTPUT_DIR / city
+    d = OUTDIR / city
     if subfolder:
         d = d / subfolder
     d.mkdir(parents=True, exist_ok=True)
@@ -50,7 +50,7 @@ ALL_CITIES = list(CITIES.keys())
 
 USE_DST = False
 
-ERA5_VARIABLES = [
+ERA5_VARS = [
     "10m_u_component_of_wind",
     "10m_v_component_of_wind",
     "2m_temperature",
@@ -58,7 +58,7 @@ ERA5_VARIABLES = [
     "boundary_layer_height",
 ]
 
-REQUIRED_VARS = {"u10", "v10", "blh", "t2m", "tp"}
+NEEDED_VARS = {"u10", "v10", "blh", "t2m", "tp"}
 
 FEATURES = [
     "u1", "v1",
@@ -68,19 +68,19 @@ FEATURES = [
     "pblh_mean",
 ]
 
-N_BLOCKS = 4
-BLOCK_HOURS = 6
+NBLOCKS = 4
+BLOCK_HRS = 6
 
 K_RANGE = range(2, 9)       
-KMEANS_N_INNIT_HAHA = 50
-RANDOM_SEED = 42
+KMEANS_INIT2 = 50
+SEED = 42
 
-N_SAMPLE_PER_REGIME = 20 
+N_PER_REGIME = 20 
 
-TEST_SIZE = 0.30
+TESTSIZE = 0.30
 
-SPLIT_MODE = "temporal"
-HOLDOUT_YEARS = [2025]
+SPLITMODE = "temporal"
+HOLDOUT_YRS = [2025]
 
 def city_config(city):
     if city not in CITIES:

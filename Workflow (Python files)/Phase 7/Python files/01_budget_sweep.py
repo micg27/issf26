@@ -66,7 +66,7 @@ _spec = importlib.util.spec_from_file_location("eval5", P5 / "01_evaluate.py")
 ev5 = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(ev5)
 
-OUT_DATA = ROOT / "data" / "processed" / "phase7"
+OUTDATA = ROOT / "data" / "processed" / "phase7"
 OUT_FIG = ROOT / "outputs" / "phase7"
 N_BOOT = ev5.N_BOOT
 K_TAG = ""   # Phase 8: e.g. "_K200" = simulations and networks at K = 200
@@ -74,9 +74,9 @@ HEADLINE = ev5.HEADLINE
 AREA_KM2 = {"singapore": 655.3, "melbourne": 2611.2}       # Phase 1 candidate land area
 STEP = {"singapore": 1.0, "melbourne": AREA_KM2["melbourne"] / AREA_KM2["singapore"]}
 THRESHOLDS = [0.005, 0.01, 0.02]
-HEADLINE_THRESHOLD = 0.01
+MAIN_THRESH = 0.01
 N_GRID = np.arange(5, 20001, dtype=float)                  # where N* is searched
-SLOPE_RANGES = {"singapore": {"full": (5, 40)},
+SLOPE_RNG = {"singapore": {"full": (5, 40)},
                 "melbourne": {"full": (5, 160), "equal_count_5-40": (5, 40),
                               "equal_density_20-160": (20, 160)}}
 SAVED_AT = {"singapore": [8, 22, 40], "melbourne": [8, 22, 32, 40, 88, 160]}
@@ -90,7 +90,7 @@ BANDS = {"singapore": [(5, 10), (11, 20), (21, 40)],                  # Phase 5'
 # ---------------------------------------------------------
 
 def setting_original(city):
-    m = N.load_maps(city, test_set="all2025", train_set="all", k_tag=K_TAG)
+    m = N.load_maps(city, testset="all2025", trainset="all", k_tag=K_TAG)
     kj = json.load(open(cfg.processed_dir(city) / f"{city}_kriging_trainall{K_TAG}.json"))
     nets = pd.read_csv(cfg.processed_dir(city) / f"{city}_networks_trainall{K_TAG}.csv")
     greedy = nets[(nets["strategy"] == "greedy") & (nets["noise"] == HEADLINE)]
@@ -102,7 +102,7 @@ def setting_original(city):
 def setting_L0(city, cells):
     packed = []
     for period in ("train", "test2025"):
-        ds = xr.open_dataset(cfg.PHASE3_DIR / city / f"{city}_ingredients_{period}{K_TAG}.nc")
+        ds = xr.open_dataset(cfg.P3_DIR / city / f"{city}_ingredients_{period}{K_TAG}.nc")
         meta = pd.DataFrame({"day": np.arange(ds.sizes["day"]), "member": 0,
                              "date": ds["date"].values, "regime": ds["regime"].values.astype(str),
                              "w_k": ds["w_k"].values})
@@ -112,7 +112,7 @@ def setting_L0(city, cells):
     train, test = packed
     Sigma = N.second_moment(train["X"], train["w"])
     vg = N.fit_variogram(cells, Sigma)
-    sd = cfg.HEADLINE_NOISE_FRACTION * N.spatial_sd(train["X"], train["w"])
+    sd = cfg.MAIN_NOISE * N.spatial_sd(train["X"], train["w"])
     order, _ = N.greedy_rmse(N.covariance(cells, vg), Sigma, vg, sd**2, cfg.N_MAX[city])
     return {"cells": cells, "test": test, "vg": vg, "sd": sd,
             "greedy": {n: list(order[:n]) for n in range(cfg.N_MIN, cfg.N_MAX[city] + 1)}}
@@ -123,12 +123,12 @@ def per_map_mse(s, kmeans):
     K = N.covariance(s["cells"], s["vg"])
     extra = N.sensor_variance(s["vg"], s["sd"]**2)
     X = s["test"]["X"]
-    n_vals = sorted(s["greedy"])
+    nvals = sorted(s["greedy"])
     out = {}
     for strat, nets in (("greedy", s["greedy"]), ("kmeans", kmeans)):
         out[strat] = np.column_stack(
-            [N.map_mse(X, nets[n], N.ok_weights(K, nets[n], extra), s["sd"]**2) for n in n_vals])
-    return np.array(n_vals), out
+            [N.map_mse(X, nets[n], N.ok_weights(K, nets[n], extra), s["sd"]**2) for n in nvals])
+    return np.array(nvals), out
 
 
 # ---------------------------------------------------------
@@ -183,13 +183,13 @@ def analyse(city, setting, s, kmeans):
     n, mse = per_map_mse(s, kmeans)
     w, meta = s["test"]["w"], s["test"]["meta"]
     # bootstrap multiplicities (draw, map), same draws as Phase 5
-    idx = ev5.bootstrap_index(meta, N_BOOT, [cfg.RANDOM_SEED, 5, len(city)])
+    idx = ev5.bootstrap_index(meta, N_BOOT, [cfg.SEED, 5, len(city)])
     B = np.stack([np.bincount(i, minlength=len(w)) for i in idx]).astype(float) * w
 
     rm = {k: np.sqrt(w @ v) for k, v in mse.items()}                       # (N,)
     rm_b = {k: np.sqrt((B @ v) / B.sum(1, keepdims=True)) for k, v in mse.items()}  # (draw, N)
-    imp, imp_b = 1 - rm["greedy"] / rm["kmeans"], 1 - rm_b["greedy"] / rm_b["kmeans"]
-    ci = np.percentile(imp_b, [2.5, 97.5], axis=0)
+    imp, impb = 1 - rm["greedy"] / rm["kmeans"], 1 - rm_b["greedy"] / rm_b["kmeans"]
+    ci = np.percentile(impb, [2.5, 97.5], axis=0)
 
     out = {"variogram_range_km": s["vg"]["range_m"] / 1000, "noise_sd": float(s["sd"]),
            "curve_fit": {}, "n_star": {}, "slopes": {}}
@@ -201,13 +201,13 @@ def analyse(city, setting, s, kmeans):
         out["curve_fit"][strat] = {"a": p[0], "b": p[1], "c": p[2],
                                    "r2": float(1 - resid.var() / rm[strat].var()),
                                    "max_abs_resid": float(np.abs(resid).max())}
-        boot_p = [fit_curve(n, r, p0=p) for r in rm_b[strat]]
-        n_fail = sum(q is None for q in boot_p)
+        bootp = [fit_curve(n, r, p0=p) for r in rm_b[strat]]
+        nfail = sum(q is None for q in bootp)
         res = {}
         for basis, step in (("per_sensor", 1.0), ("area_fair", STEP[city])):
             for t in THRESHOLDS:
                 pt = n_star(p, t, step)
-                bs = [n_star(q, t, step) for q in boot_p if q is not None]
+                bs = [n_star(q, t, step) for q in bootp if q is not None]
                 res[f"{basis}_{t:g}"] = {
                     "N_star": pt, "ci95": pct(bs),
                     "share_boot_beyond_grid": float(np.mean(np.isinf(bs))),
@@ -215,14 +215,14 @@ def analyse(city, setting, s, kmeans):
                     "density_per_100km2": pt / AREA_KM2[city] * 100,
                     "density_ci95": [x / AREA_KM2[city] * 100 if x is not None else None for x in pct(bs)],
                     "spacing_km": float(np.sqrt(AREA_KM2[city] / pt))}
-        res["boot_fit_failures"] = n_fail
+        res["boot_fit_failures"] = nfail
         out["n_star"][strat] = res
         print(f"  {strat}: b = {p[1]:.2f}, N*(1%) = {res['per_sensor_0.01']['N_star']:.0f} "
               f"{res['per_sensor_0.01']['ci95']}, area-fair {res['area_fair_0.01']['N_star']:.0f}")
 
-    for name, (lo, hi) in SLOPE_RANGES[city].items():
+    for name, (lo, hi) in SLOPE_RNG[city].items():
         b1 = slope(n, imp, lo, hi)
-        bs = [slope(n, row, lo, hi) for row in imp_b]
+        bs = [slope(n, row, lo, hi) for row in impb]
         out["slopes"][name] = {"N_range": [lo, hi], "beta1": b1, "ci95": pct(bs),
                                "per_doubling_pp": 100 * b1 * np.log(2)}
         print(f"  slope {name}: {100 * b1:+.2f} pp per unit ln N {pct(100 * np.array(bs))}")
@@ -241,13 +241,13 @@ def analyse(city, setting, s, kmeans):
     for lo, hi in BANDS[city]:
         keep = (n >= lo) & (n <= hi)
         out["band_mean_improvement_descriptive"][f"N{lo}-{hi}"] = [
-            float(imp[keep].mean()), *pct(imp_b[:, keep].mean(1))]
+            float(imp[keep].mean()), *pct(impb[:, keep].mean(1))]
 
     curves = pd.DataFrame({"N": n, "rmse_greedy": rm["greedy"], "rmse_kmeans": rm["kmeans"],
                            "fit_greedy": power_law(n, *fits["greedy"]),
                            "fit_kmeans": power_law(n, *fits["kmeans"]),
                            "improvement": imp, "ci_low": ci[0], "ci_high": ci[1]})
-    curves.to_csv(OUT_DATA / f"{city}_{setting}_curves{K_TAG}.csv", index=False)
+    curves.to_csv(OUTDATA / f"{city}_{setting}_curves{K_TAG}.csv", index=False)
     return out, curves
 
 
@@ -257,8 +257,8 @@ def compare(res):
     for setting in res["singapore"]:
         out[setting] = {}
         for strat in ("greedy", "kmeans"):
-            sg = res["singapore"][setting]["n_star"][strat][f"area_fair_{HEADLINE_THRESHOLD:g}"]
-            mel = res["melbourne"][setting]["n_star"][strat][f"area_fair_{HEADLINE_THRESHOLD:g}"]
+            sg = res["singapore"][setting]["n_star"][strat][f"area_fair_{MAIN_THRESH:g}"]
+            mel = res["melbourne"][setting]["n_star"][strat][f"area_fair_{MAIN_THRESH:g}"]
             out[setting][strat] = {"density_singapore": sg["density_per_100km2"],
                                    "density_melbourne": mel["density_per_100km2"],
                                    "density_ci_singapore": sg["density_ci95"],
@@ -308,7 +308,7 @@ if __name__ == "__main__":
                     help="Phase 8: K (m2/s) of the simulations to use")
     k = ap.parse_args().k
     K_TAG = "" if k is None else f"_K{k:g}"
-    OUT_DATA.mkdir(parents=True, exist_ok=True)
+    OUTDATA.mkdir(parents=True, exist_ok=True)
     results, curves, scores = {}, {}, {}
     for city in cfg.ALL_CITIES:
         nets = pd.read_csv(cfg.processed_dir(city) / f"{city}_networks_trainall.csv")
@@ -322,7 +322,7 @@ if __name__ == "__main__":
             results[city][setting], curves[(city, setting)] = analyse(city, setting, s, kmeans)
     results["city_comparison_area_fair"] = compare(results)
     results["K_m2_s"] = k
-    with open(OUT_DATA / f"phase7_budget_sweep{K_TAG}.json", "w") as f:
+    with open(OUTDATA / f"phase7_budget_sweep{K_TAG}.json", "w") as f:
         json.dump(results, f, indent=2, default=float)
     plot(curves, scores)
     print(json.dumps(results["city_comparison_area_fair"], indent=2, default=float))

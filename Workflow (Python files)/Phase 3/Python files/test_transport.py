@@ -14,13 +14,13 @@ NY, NX, DX = 60, 80, 2000.0
 YY, XX = np.mgrid[:NY, :NX]
 
 
-def fields(u, v, h, n_instants):
-    shape = (n_instants, NY, NX)
+def fields(u, v, h, ninstants):
+    shape = (ninstants, NY, NX)
     return {"u10": np.full(shape, u), "v10": np.full(shape, v), "blh": np.full(shape, h)}
 
 
-def blob(row, col, sigma_cells=3.0):
-    return np.exp(-((XX - col) ** 2 + (YY - row) ** 2) / (2 * sigma_cells**2))[None]
+def blob(row, col, sigmacells=3.0):
+    return np.exp(-((XX - col) ** 2 + (YY - row) ** 2) / (2 * sigmacells**2))[None]
 
 
 def zeros():

@@ -59,7 +59,7 @@ _spec.loader.exec_module(cfg)
 N_BOOT = 2000
 J = 5
 N_AREA = 20
-N_VALUES = {"singapore": [5, 8, 10, 15, 22, 30, 40],
+NVALS = {"singapore": [5, 8, 10, 15, 22, 30, 40],
             "melbourne": [5, 8, 10, 15, 22, 30, 32, 40, 60, 88, 120, 160]}
 LEVELS = {  # name: (point mode, p, use area noise)
     "L0": (None, 0.0, False),
@@ -75,33 +75,33 @@ PAIRS = {"own_network_size": (22, 8), "equal_count_N8": (8, 8), "equal_count_N22
 
 
 def load_ingredients(city, period):
-    ds = xr.open_dataset(cfg.PHASE3_DIR / city / f"{city}_ingredients_{period}{K_TAG}.nc")
+    ds = xr.open_dataset(cfg.P3_DIR / city / f"{city}_ingredients_{period}{K_TAG}.nc")
     meta = pd.DataFrame({"date": pd.to_datetime(ds["date"].values),
                          "regime": ds["regime"].values.astype(str),
                          "w_k": ds["w_k"].values})
     return ds["response"].values.astype(float), meta, ds.attrs["base_total_ug_s"], ds["cell_id"].values
 
 
-def magnitudes(meta, site_set):
+def magnitudes(meta, siteset):
     """(day, member, J) magnitudes per unit p: mean total / J, lognormal sigma 1."""
     out = np.empty((len(meta), N_AREA, J))
     for d, date in enumerate(meta["date"]):
-        rng = np.random.default_rng([cfg.RANDOM_SEED, 63, date.year, date.dayofyear, site_set])
+        rng = np.random.default_rng([cfg.SEED, 63, date.year, date.dayofyear, siteset])
         out[d] = rng.lognormal(-0.5, 1.0, (N_AREA, J))
     return out
 
 
-def assemble(resp, meta, total, level, site_set):
+def assemble(resp, meta, total, level, siteset):
     """Maps (day*member, cell) and their metadata for one level."""
     mode, p, area = LEVELS[level]
     base = resp[:, 0]                                         # (D, C)
-    area_m = resp[:, 1:1 + N_AREA]                            # (D, M, C)
-    local = area_m if area else np.repeat(base[:, None], N_AREA, axis=1)
+    aream = resp[:, 1:1 + N_AREA]                            # (D, M, C)
+    local = aream if area else np.repeat(base[:, None], N_AREA, axis=1)
     X = (1 - p) * local
     if mode == "fixed":
-        k0 = 1 + N_AREA + J * site_set
+        k0 = 1 + N_AREA + J * siteset
         R = resp[:, k0:k0 + J]                                # (D, J, C) per 1 ug/s
-        a = p * total / J * magnitudes(meta, site_set)        # (D, M, J)
+        a = p * total / J * magnitudes(meta, siteset)        # (D, M, J)
         X = X + np.einsum("dmj,djc->dmc", a, R)
     D, M, C = X.shape
     m = pd.DataFrame({"day": np.repeat(np.arange(D), M), "member": np.tile(np.arange(M), D),
@@ -111,7 +111,7 @@ def assemble(resp, meta, total, level, site_set):
 
 
 def existing_L5(city):
-    maps = N.load_maps(city, test_set="all2025", train_set="all", k_tag=K_TAG)
+    maps = N.load_maps(city, testset="all2025", trainset="all", k_tag=K_TAG)
     out = {}
     for split in ("train", "test"):
         keep = (maps[split]["meta"]["member"] > 0).to_numpy()
@@ -128,20 +128,20 @@ def weights(m):
 def boot_index(m, seed):
     rng = np.random.default_rng(seed)
     days, reg = m["day"].to_numpy(), m["regime"].to_numpy()
-    by_reg = {r: np.unique(days[reg == r]) for r in np.unique(reg)}
+    byreg = {r: np.unique(days[reg == r]) for r in np.unique(reg)}
     rows = {d: np.nonzero(days == d)[0] for d in np.unique(days)}
-    return [np.concatenate([rows[d] for v in by_reg.values() for d in rng.choice(v, len(v))])
+    return [np.concatenate([rows[d] for v in byreg.values() for d in rng.choice(v, len(v))])
             for _ in range(N_BOOT)]
 
 
-def evaluate_level(city, cells, kmeans_nets, Xtr, mtr, Xte, mte):
+def evaluate_level(city, cells, kmeansnets, Xtr, mtr, Xte, mte):
     wtr, wte = weights(mtr), weights(mte)
     Sigma = N.second_moment(Xtr, wtr)
     vg = N.fit_variogram(cells, Sigma)
     K = N.covariance(cells, vg)
-    sd = cfg.HEADLINE_NOISE_FRACTION * N.spatial_sd(Xtr, wtr)
-    order, _ = N.greedy_rmse(K, Sigma, vg, sd**2, max(N_VALUES[city]))
-    boots = boot_index(mte, [cfg.RANDOM_SEED, 64, len(city)])
+    sd = cfg.MAIN_NOISE * N.spatial_sd(Xtr, wtr)
+    order, _ = N.greedy_rmse(K, Sigma, vg, sd**2, max(NVALS[city]))
+    boots = boot_index(mte, [cfg.SEED, 64, len(city)])
 
     def mse(S):
         W = N.ok_weights(K, S, N.sensor_variance(vg, sd**2))
@@ -152,8 +152,8 @@ def evaluate_level(city, cells, kmeans_nets, Xtr, mtr, Xte, mte):
 
     res, draws = {}, {}
     allrows = np.arange(len(Xte))
-    for n in N_VALUES[city]:
-        g, k = mse(order[:n]), mse(kmeans_nets[n])
+    for n in NVALS[city]:
+        g, k = mse(order[:n]), mse(kmeansnets[n])
         bs = np.array([imp(g, k, i) for i in boots])
         res[str(n)] = [float(imp(g, k, allrows)), *np.percentile(bs, [2.5, 97.5]).tolist()]
         draws[n] = bs
@@ -165,11 +165,11 @@ def run_city(city):
     print(f"=== {city}")
     nets = pd.read_csv(cfg.processed_dir(city) / f"{city}_networks_trainall.csv")
     km = nets[nets["strategy"] == "kmeans"]
-    kmeans_nets = {n: g.sort_values("rank")["cell_index"].tolist() for n, g in km.groupby("N")}
+    kmeansnets = {n: g.sort_values("rank")["cell_index"].tolist() for n, g in km.groupby("N")}
     L5, cells = existing_L5(city)
     rtr, mtr0, total, ids = load_ingredients(city, "train")
-    rte, mte0, _, ids_te = load_ingredients(city, "test2025")
-    assert np.array_equal(ids, cells["cell_id"].values) and np.array_equal(ids_te, ids)
+    rte, mte0, _, idste = load_ingredients(city, "test2025")
+    assert np.array_equal(ids, cells["cell_id"].values) and np.array_equal(idste, ids)
 
     out, draws = {}, {}
     for level in LEVELS:
@@ -181,8 +181,8 @@ def run_city(city):
             else:
                 Xtr, mtr = assemble(rtr, mtr0, total, level, s or 0)
                 Xte, mte = assemble(rte, mte0, total, level, s or 0)
-            out[key], draws[key] = evaluate_level(city, cells, kmeans_nets, Xtr, mtr, Xte, mte)
-            hn = cfg.HEADLINE_N[city]
+            out[key], draws[key] = evaluate_level(city, cells, kmeansnets, Xtr, mtr, Xte, mte)
+            hn = cfg.MAIN_N[city]
             r = out[key]["improvement"][str(hn)]
             print(f"  {key:9s} N={hn}: {100 * r[0]:+.1f}% ({100 * r[1]:+.1f}, {100 * r[2]:+.1f})")
     return out, draws

@@ -45,7 +45,7 @@ import xarray as xr
 from pyproj import Transformer
 from scipy.interpolate import RegularGridInterpolator
 
-H_MIN_M = 50.0        # floor on boundary-layer height (ERA5 nights reach ~10 m)
+HMIN = 50.0        # floor on boundary-layer height (ERA5 nights reach ~10 m)
 CFL = 0.8
 
 
@@ -53,16 +53,16 @@ CFL = 0.8
 # METEOROLOGY ON THE DOMAIN
 # ---------------------------------------------------------
 
-def load_met(city, phase2_dir, utc_start, utc_end):
+def load_met(city, phase2dir, utcstart, utcend):
     """Hourly u10/v10/blh (UTC) from Phase 2's processed yearly files."""
-    years = range(utc_start.year, utc_end.year + 1)
-    files = [phase2_dir / city / f"{city}_hourly_{y}.nc" for y in years]
+    years = range(utcstart.year, utcend.year + 1)
+    files = [phase2dir / city / f"{city}_hourly_{y}.nc" for y in years]
     ds = xr.open_mfdataset(files, combine="by_coords")[["u10", "v10", "blh"]]
-    ds = ds.sel(time=slice(utc_start, utc_end)).load()
-    n_expected = int((utc_end - utc_start) / pd.Timedelta(hours=1)) + 1
-    assert ds.sizes["time"] == n_expected, (
-        f"{city}: met has {ds.sizes['time']} hours in {utc_start}..{utc_end}, "
-        f"expected {n_expected}"
+    ds = ds.sel(time=slice(utcstart, utcend)).load()
+    nexpected = int((utcend - utcstart) / pd.Timedelta(hours=1)) + 1
+    assert ds.sizes["time"] == nexpected, (
+        f"{city}: met has {ds.sizes['time']} hours in {utcstart}..{utcend}, "
+        f"expected {nexpected}"
     )
     return ds
 
@@ -75,9 +75,9 @@ def met_to_domain(met, domain):
     western third is extrapolated this way).
     Returns arrays shaped (n_hours, ny, nx).
     """
-    to_ll = Transformer.from_crs(domain.attrs["crs"], "EPSG:4326", always_xy=True)
+    toll = Transformer.from_crs(domain.attrs["crs"], "EPSG:4326", always_xy=True)
     X, Y = np.meshgrid(domain.x.values, domain.y.values)
-    lon, lat = to_ll.transform(X, Y)
+    lon, lat = toll.transform(X, Y)
 
     lats = met.latitude.values
     lons = met.longitude.values
@@ -96,7 +96,7 @@ def met_to_domain(met, domain):
             f = RegularGridInterpolator((lats, lons), a[t], method="linear")
             fields[t] = f(pts).reshape(X.shape)
         out[var] = fields
-    out["blh"] = np.maximum(out["blh"], H_MIN_M)
+    out["blh"] = np.maximum(out["blh"], HMIN)
     return out
 
 
@@ -106,15 +106,15 @@ def met_to_domain(met, domain):
 
 def _mc_limited_slope(c, axis):
     """Monotonized-central limited slope along `axis` (zero at the edges)."""
-    d_fwd = np.diff(c, axis=axis, append=np.take(c, [-1], axis=axis))
-    d_bwd = np.diff(c, axis=axis, prepend=np.take(c, [0], axis=axis))
-    d_cen = 0.5 * (d_fwd + d_bwd)
-    same = np.sign(d_fwd) == np.sign(d_bwd)
-    lim = np.minimum(np.minimum(2 * np.abs(d_fwd), 2 * np.abs(d_bwd)), np.abs(d_cen))
-    return np.where(same, np.sign(d_cen) * lim, 0.0)
+    dfwd = np.diff(c, axis=axis, append=np.take(c, [-1], axis=axis))
+    dbwd = np.diff(c, axis=axis, prepend=np.take(c, [0], axis=axis))
+    dcen = 0.5 * (dfwd + dbwd)
+    same = np.sign(dfwd) == np.sign(dbwd)
+    lim = np.minimum(np.minimum(2 * np.abs(dfwd), 2 * np.abs(dbwd)), np.abs(dcen))
+    return np.where(same, np.sign(dcen) * lim, 0.0)
 
 
-def _advect_1d(c, vel_face, dt, dx, bg, axis):
+def _advect_1d(c, velface, dt, dx, bg, axis):
     """One TVD advection step along `axis` (last two axes are y, x).
 
     vel_face holds velocities on the n+1 faces along `axis` (positive
@@ -125,12 +125,12 @@ def _advect_1d(c, vel_face, dt, dx, bg, axis):
     pad = [(0, 0)] * c.ndim
     pad[axis] = (2, 2)
     g = np.pad(c, pad, mode="constant")
-    idx_lo = [slice(None)] * c.ndim
-    idx_hi = [slice(None)] * c.ndim
-    idx_lo[axis] = slice(0, 2)
-    idx_hi[axis] = slice(-2, None)
-    g[tuple(idx_lo)] = bg[(...,) + (None,) * (c.ndim - 1)] if np.ndim(bg) else bg
-    g[tuple(idx_hi)] = bg[(...,) + (None,) * (c.ndim - 1)] if np.ndim(bg) else bg
+    idxlo = [slice(None)] * c.ndim
+    idxhi = [slice(None)] * c.ndim
+    idxlo[axis] = slice(0, 2)
+    idxhi[axis] = slice(-2, None)
+    g[tuple(idxlo)] = bg[(...,) + (None,) * (c.ndim - 1)] if np.ndim(bg) else bg
+    g[tuple(idxhi)] = bg[(...,) + (None,) * (c.ndim - 1)] if np.ndim(bg) else bg
 
     s = _mc_limited_slope(g, axis)
     n = c.shape[axis]
@@ -141,20 +141,20 @@ def _advect_1d(c, vel_face, dt, dx, bg, axis):
     cl, sl = g[tuple(left)], s[tuple(left)]
     cr, sr = g[tuple(right)], s[tuple(right)]
 
-    nu = vel_face * dt / dx
-    face_val = np.where(
-        vel_face >= 0,
+    nu = velface * dt / dx
+    faceval = np.where(
+        velface >= 0,
         cl + 0.5 * (1 - nu) * sl,
         cr - 0.5 * (1 + nu) * sr,
     )
-    flux = vel_face * face_val
+    flux = velface * faceval
     lo = [slice(None)] * c.ndim
     hi = [slice(None)] * c.ndim
     lo[axis] = slice(0, n)
     hi[axis] = slice(1, n + 1)
     # Flux divergence plus the C div(u) correction -> advective form.
-    vel_div = vel_face[tuple(hi)] - vel_face[tuple(lo)]
-    return c - dt / dx * (flux[tuple(hi)] - flux[tuple(lo)] - c * vel_div)
+    veldiv = velface[tuple(hi)] - velface[tuple(lo)]
+    return c - dt / dx * (flux[tuple(hi)] - flux[tuple(lo)] - c * veldiv)
 
 
 def _diffuse(c, K, dt, dx, bg):
@@ -177,7 +177,7 @@ def _faces(field, axis):
 # RUN
 # ---------------------------------------------------------
 
-def run(fields, dx, emis, lam, K, bg, c0, sample_cells=None, store_hourly=False):
+def run(fields, dx, emis, lam, K, bg, c0, samplecells=None, keephourly=False):
     """Integrate the model over all hours in `fields`.
 
     emis   (ntr, ny, nx) emission flux per tracer, ug m-2 s-1
@@ -194,29 +194,29 @@ def run(fields, dx, emis, lam, K, bg, c0, sample_cells=None, store_hourly=False)
     The number of hours integrated is len(fields["u10"]) - 1 (fields are
     instants at the start and end of each hour).
     """
-    u_all, v_all, h_all = fields["u10"], fields["v10"], fields["blh"]
-    n_hours = u_all.shape[0] - 1
+    uall, vall, hall = fields["u10"], fields["v10"], fields["blh"]
+    nhours = uall.shape[0] - 1
     lam = np.asarray(lam, dtype=float)[:, None, None]
     bg = np.asarray(bg, dtype=float)
     c = np.array(c0, dtype=float)
 
-    samples = [] if sample_cells is not None else None
-    hourly = [] if store_hourly else None
+    samples = [] if samplecells is not None else None
+    hourly = [] if keephourly else None
 
-    for i in range(n_hours):
-        speed_max = max(np.abs(u_all[i:i + 2]).max(), np.abs(v_all[i:i + 2]).max(), 1e-6)
-        dt_adv = CFL * dx / speed_max
-        dt_dif = 0.2 * dx**2 / max(K, 1e-9)
-        n_sub = int(np.ceil(3600.0 / min(dt_adv, dt_dif)))
-        dt = 3600.0 / n_sub
+    for i in range(nhours):
+        speedmax = max(np.abs(uall[i:i + 2]).max(), np.abs(vall[i:i + 2]).max(), 1e-6)
+        dtadv = CFL * dx / speedmax
+        dtdif = 0.2 * dx**2 / max(K, 1e-9)
+        nsub = int(np.ceil(3600.0 / min(dtadv, dtdif)))
+        dt = 3600.0 / nsub
 
-        dhdt = (h_all[i + 1] - h_all[i]) / 3600.0
+        dhdt = (hall[i + 1] - hall[i]) / 3600.0
         acc = np.zeros_like(c)
-        for k in range(n_sub):
-            w = (k + 0.5) / n_sub
-            u = (1 - w) * u_all[i] + w * u_all[i + 1]
-            v = (1 - w) * v_all[i] + w * v_all[i + 1]
-            h = (1 - w) * h_all[i] + w * h_all[i + 1]
+        for k in range(nsub):
+            w = (k + 0.5) / nsub
+            u = (1 - w) * uall[i] + w * uall[i + 1]
+            v = (1 - w) * vall[i] + w * vall[i + 1]
+            h = (1 - w) * hall[i] + w * hall[i + 1]
 
             # x: columns, positive east. y: rows run north -> south, so
             # the "positive index" velocity along rows is -v.
@@ -228,18 +228,18 @@ def run(fields, dx, emis, lam, K, bg, c0, sample_cells=None, store_hourly=False)
             # Sources, loss and entrainment, exact over dt:
             #   dC/dt = S - k C,  S = E/h + w_e C_bg / h,  k = lam + w_e / h
             we_h = np.maximum(dhdt, 0.0) / h
-            k_rate = lam + we_h[None]
+            krate = lam + we_h[None]
             src = emis / h[None] + we_h[None] * bg[:, None, None]
-            decay = np.exp(-k_rate * dt)
-            c_eq = np.where(k_rate > 0, src / np.where(k_rate > 0, k_rate, 1), 0.0)
-            c = np.where(k_rate > 0, c_eq + (c - c_eq) * decay, c + src * dt)
+            decay = np.exp(-krate * dt)
+            c_eq = np.where(krate > 0, src / np.where(krate > 0, krate, 1), 0.0)
+            c = np.where(krate > 0, c_eq + (c - c_eq) * decay, c + src * dt)
 
             acc += c
-        mean_c = acc / n_sub
+        meanc = acc / nsub
         if samples is not None:
-            samples.append(mean_c[:, sample_cells[0], sample_cells[1]])
+            samples.append(meanc[:, samplecells[0], samplecells[1]])
         if hourly is not None:
-            hourly.append(mean_c.astype(np.float32))
+            hourly.append(meanc.astype(np.float32))
 
     result = {"final": c}
     if samples is not None:

@@ -34,11 +34,11 @@ P7 = ROOT / "data" / "processed" / "phase7"
 OUT = ROOT / "Graphs" / "Poster picks"
 
 GREEN, TEAL, GREY, INK, MUTED, CELL = "#13703f", "#1f8bb8", "#8a8f8c", "#1d2b22", "#5c6b62", "#dfe6e1"
-CITY_COL = {"singapore": GREEN, "melbourne": TEAL}
-HEADLINE_N = {"singapore": 22, "melbourne": 8}
+CITYCOL = {"singapore": GREEN, "melbourne": TEAL}
+MAIN_N = {"singapore": 22, "melbourne": 8}
 HEADLINE = "f0.25"
-CITY_NAME = {"singapore": "Singapore", "melbourne": "Melbourne"}
-REGIME_NAME = {"SIN1": "Southwest monsoon", "SIN2": "Inter-monsoon", "SIN3": "Northeast monsoon",
+CITYNAME = {"singapore": "Singapore", "melbourne": "Melbourne"}
+REGIME_NAMES = {"SIN1": "Southwest monsoon", "SIN2": "Inter-monsoon", "SIN3": "Northeast monsoon",
                "MEL1": "Light south-easterlies", "MEL2": "Northerlies (before a front)",
                "MEL3": "Westerlies (after a front)"}
 
@@ -66,8 +66,8 @@ def save(fig, name):
 
 def cell_size(fig, ncols, cx, share=0.78):
     """Marker area (pt^2) so each 2 km cell square nearly fills its grid spacing."""
-    cells_across = (float(cx.max()) - float(cx.min())) / 2000 + 1
-    pt = fig.get_figwidth() * 72 / ncols * share / cells_across
+    ncells = (float(cx.max()) - float(cx.min())) / 2000 + 1
+    pt = fig.get_figwidth() * 72 / ncols * share / ncells
     return (0.95 * pt) ** 2
 
 
@@ -85,14 +85,14 @@ def fig1_plumes(city):
         fig.colorbar(sc, ax=ax, shrink=0.8, label="Local PM2.5 (µg/m³)")
         r = str(ds["regime"].values[d])
         day = pd.Timestamp(ds["date"].values[d]).strftime("%-d %b %Y")
-        ax.set_title(f"{REGIME_NAME[r]}\n{day}")
+        ax.set_title(f"{REGIME_NAMES[r]}\n{day}")
         ax.set_aspect("equal")
         ax.set_xticks([])
         ax.set_yticks([])
         ax.grid(False)
         for s in ax.spines.values():
             s.set_visible(False)
-    fig.suptitle(f"{CITY_NAME[city]}: simulated daily PM2.5 from local emissions on a typical day "
+    fig.suptitle(f"{CITYNAME[city]}: simulated daily PM2.5 from local emissions on a typical day "
                  "of each weather pattern\nEach map has its own colour scale", fontsize=14)
     save(fig, f"1_plume_maps_by_regime_{city}.png")
 
@@ -101,7 +101,7 @@ def fig2_networks(city):
     ds = xr.open_dataset(P3 / city / f"{city}_scenarios.nc")
     x, y = ds["cell_x"].values / 1000, ds["cell_y"].values / 1000
     nets = pd.read_csv(P4 / city / f"{city}_networks_trainall.csv")
-    n = HEADLINE_N[city]
+    n = MAIN_N[city]
     panels = [("greedy", HEADLINE, "Weather-informed", GREEN, "o"),
               ("kmeans", "any", "Evenly spread", TEAL, "s")]
     if (nets["strategy"] == "existing").any():
@@ -121,7 +121,7 @@ def fig2_networks(city):
         ax.grid(False)
         for s in ax.spines.values():
             s.set_visible(False)
-    fig.suptitle(f"{CITY_NAME[city]}: where each strategy places {n} sensors "
+    fig.suptitle(f"{CITYNAME[city]}: where each strategy places {n} sensors "
                  f"(the size of the city's real network)", fontsize=14)
     save(fig, f"2_sensor_networks_{city}.png")
 
@@ -140,8 +140,8 @@ def fig3_predictability():
             v = np.array([res[city][k]["improvement"][str(n)] for k in order]) * 100
             ax.errorbar(np.arange(len(order)) + off, v[:, 0],
                         yerr=[v[:, 0] - v[:, 1], v[:, 2] - v[:, 0]], fmt=mk, ms=8,
-                        color=CITY_COL[city], mec="white", mew=1, capsize=3, elinewidth=1.5,
-                        label=f"{CITY_NAME[city]} ({n} sensors)")
+                        color=CITYCOL[city], mec="white", mew=1, capsize=3, elinewidth=1.5,
+                        label=f"{CITYNAME[city]} ({n} sensors)")
         ax.axhline(0, color=MUTED, lw=1)
         ax.set_xticks(range(len(order)))
         ax.set_xticklabels(labels, fontsize=11)
@@ -169,9 +169,9 @@ def fig4_sensor_count():
         for strat, style, name in (("qr", "--", "QR pivoting"), ("random_mean", ":", "Random")):
             q = sc[sc["strategy"] == strat].sort_values("N")
             ax.plot(q["N"], q["test_rmse"], style, color=GREY, lw=1.5, label=name)
-        ax.axvline(HEADLINE_N[city], color=MUTED, ls=":", lw=1)
+        ax.axvline(MAIN_N[city], color=MUTED, ls=":", lw=1)
         ax.set_ylim(0, 1.3 * c["rmse_kmeans"].max())
-        ax.set_title(f"{CITY_NAME[city]}: map error falls as sensors are added")
+        ax.set_title(f"{CITYNAME[city]}: map error falls as sensors are added")
         ax.set_xlabel("Number of sensors")
         ax.set_ylabel("Map error, RMSE (µg/m³)")
         ax.legend(fontsize=10)
@@ -183,8 +183,8 @@ def fig4_sensor_count():
             ax.plot(c["N"], 100 * c["improvement"], color=colour, label=name)
             ax.fill_between(c["N"], 100 * c["ci_low"], 100 * c["ci_high"], color=colour, alpha=0.18, lw=0)
         ax.axhline(0, color=MUTED, lw=1)
-        ax.axvline(HEADLINE_N[city], color=MUTED, ls=":", lw=1)
-        ax.set_title(f"{CITY_NAME[city]}: gain from weather-informed placement")
+        ax.axvline(MAIN_N[city], color=MUTED, ls=":", lw=1)
+        ax.set_title(f"{CITYNAME[city]}: gain from weather-informed placement")
         ax.set_xlabel("Number of sensors")
         ax.set_ylabel("Accuracy gain over even spacing (%)")
         ax.legend(fontsize=10)
@@ -211,22 +211,22 @@ def fig5_main_test(city):
     ex = sc[sc["strategy"] == "existing"]
     if len(ex):
         ax.plot(ex["N"], ex["test_rmse"], "*", color=INK, ms=14, label="Existing EPA network")
-    ax.axvline(HEADLINE_N[city], color=MUTED, ls=":", lw=1)
+    ax.axvline(MAIN_N[city], color=MUTED, ls=":", lw=1)
     km = sc[sc["strategy"] == "kmeans"]["test_rmse"]
     ax.set_ylim(0, 1.5 * km.max())
     ax.set_xlabel("Number of sensors")
     ax.set_ylabel("Map error on 2025 days, RMSE (µg/m³)")
-    ax.set_title(f"{CITY_NAME[city]}: map error by placement strategy")
+    ax.set_title(f"{CITYNAME[city]}: map error by placement strategy")
     ax.legend(fontsize=10)
 
     ax = axes[1]
     ax.plot(imp["N"], 100 * imp["improvement"], color=GREEN)
     ax.fill_between(imp["N"], 100 * imp["ci_low"], 100 * imp["ci_high"], color=GREEN, alpha=0.18, lw=0)
     ax.axhline(0, color=MUTED, lw=1)
-    ax.axvline(HEADLINE_N[city], color=MUTED, ls=":", lw=1)
+    ax.axvline(MAIN_N[city], color=MUTED, ls=":", lw=1)
     ax.set_xlabel("Number of sensors")
     ax.set_ylabel("Accuracy gain over even spacing (%)")
-    ax.set_title(f"{CITY_NAME[city]}: gain from weather-informed placement")
+    ax.set_title(f"{CITYNAME[city]}: gain from weather-informed placement")
     fig.text(0.5, -0.02, "Dotted line: the city's real network size. Shading: 95% confidence interval.",
              ha="center", color=MUTED, fontsize=10)
     fig.tight_layout()
@@ -246,7 +246,7 @@ def fig6_k_sensitivity():
     res = {k: json.load(open(P5 / f"phase5_emission_predictability{t}.json")) for k, t, *_ in ks}
     fig, axes = plt.subplots(2, 1, figsize=(13, 9.5), sharex=True, sharey=True, layout="constrained")
     for ax, city in zip(axes, ("singapore", "melbourne")):
-        n = HEADLINE_N[city]
+        n = MAIN_N[city]
         for (k, _, col, mk, lab), off in zip(ks, (-0.22, 0, 0.22)):
             v = np.array([res[k][city][lv]["improvement"][str(n)] for lv in order]) * 100
             ax.errorbar(np.arange(len(order)) + off, v[:, 0],
@@ -255,7 +255,7 @@ def fig6_k_sensitivity():
         ax.axhline(0, color=MUTED, lw=1)
         ax.set_xticks(range(len(order)))
         ax.set_xticklabels(labels, fontsize=11)
-        ax.set_title(f"{CITY_NAME[city]} ({n} sensors, its real network size)", loc="left", fontsize=13)
+        ax.set_title(f"{CITYNAME[city]} ({n} sensors, its real network size)", loc="left", fontsize=13)
         ax.set_ylabel("Accuracy gain (%)")
         ax.set_ylim(-8, 45)
         ax.legend(loc="upper left", fontsize=11, ncol=3)

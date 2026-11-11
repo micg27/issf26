@@ -7,7 +7,7 @@ months = [f"{m:02d}" for m in range(1, 13)]
 days = [f"{d:02d}" for d in range(1, 32)]
 times = [f"{h:02d}:00" for h in range(24)]
 
-era5_variables = [
+era5vars = [
     '10m_u_component_of_wind',
     '10m_v_component_of_wind',
     '2m_temperature',
@@ -21,7 +21,7 @@ c.retrieve(
     {
         'product_type': 'reanalysis',
         'format': 'netcdf',
-        'variable': era5_variables,
+        'variable': era5vars,
         'year': years,
         'month': months,
         'day': days,
@@ -37,7 +37,7 @@ c.retrieve(
     {
         'product_type': 'reanalysis',
         'format': 'netcdf',
-        'variable': era5_variables,
+        'variable': era5vars,
         'year': years,
         'month': months,
         'day': days,

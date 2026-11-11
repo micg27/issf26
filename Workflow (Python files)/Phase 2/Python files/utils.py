@@ -18,10 +18,10 @@ import config
 # COMMAND-LINE INTERFACE
 # ---------------------------------------------------------
 
-def parse_cities(description, with_year=False):
+def parse_cities(desc, withyear=False):
     """Standard CLI: --city singapore | --all [--year 2021]"""
 
-    parser = argparse.ArgumentParser(description=description)
+    parser = argparse.ArgumentParser(description=desc)
 
     group = parser.add_mutually_exclusive_group(required=True)
 
@@ -37,7 +37,7 @@ def parse_cities(description, with_year=False):
         help="Run for every city in config.CITIES.",
     )
 
-    if with_year:
+    if withyear:
         parser.add_argument(
             "--year",
             type=int,
@@ -49,7 +49,7 @@ def parse_cities(description, with_year=False):
 
     cities = config.ALL_CITIES if args.all else [args.city]
 
-    if with_year:
+    if withyear:
         years = [args.year] if args.year else config.YEARS
         return cities, years
 
@@ -87,33 +87,33 @@ def local_day_bounds_utc(date, city):
 
     cfg = config.city_config(city)
 
-    local_start = pd.Timestamp(date).normalize()
-    local_end = local_start + pd.Timedelta(hours=23)
+    localstart = pd.Timestamp(date).normalize()
+    localend = localstart + pd.Timedelta(hours=23)
 
     if config.USE_DST:
         tz = cfg["timezone"]
-        utc_start = (
-            local_start
+        utcstart = (
+            localstart
             .tz_localize(tz, nonexistent="shift_forward", ambiguous=True)
             .tz_convert("UTC")
             .tz_localize(None)
         )
-        utc_end = (
-            local_end
+        utcend = (
+            localend
             .tz_localize(tz, nonexistent="shift_forward", ambiguous=True)
             .tz_convert("UTC")
             .tz_localize(None)
         )
-        return utc_start, utc_end
+        return utcstart, utcend
 
     offset = pd.Timedelta(hours=cfg["utc_offset_hours"])
 
-    return local_start - offset, local_end - offset
+    return localstart - offset, localend - offset
 
 
 def assign_block(hour):
     """Map a local hour to a 6-hour block index 1..4."""
-    return int(hour) // config.BLOCK_HOURS + 1
+    return int(hour) // config.BLOCK_HRS + 1
 
 
 # ---------------------------------------------------------
@@ -129,11 +129,11 @@ def find_raw_files(city, year):
     dataset requested.
     """
 
-    directory = config.raw_dir(city)
+    dirpath = config.raw_dir(city)
 
-    if not directory.exists():
+    if not dirpath.exists():
         raise FileNotFoundError(
-            f"Raw directory does not exist: {directory}\n"
+            f"Raw directory does not exist: {dirpath}\n"
             f"Run 00_download_era5.py first, or move your existing "
             f"downloads into this folder."
         )
@@ -144,7 +144,7 @@ def find_raw_files(city, year):
 
     files = []
     for pattern in patterns:
-        files.extend(sorted(directory.glob(pattern)))
+        files.extend(sorted(dirpath.glob(pattern)))
 
     if files:
         return files
@@ -152,14 +152,14 @@ def find_raw_files(city, year):
     # Fall back to any multi-year file in the folder; the caller will
     # subset by year after opening.
     fallback = (
-        sorted(directory.glob("*.grib"))
-        + sorted(directory.glob("*.grb"))
-        + sorted(directory.glob("*.nc"))
+        sorted(dirpath.glob("*.grib"))
+        + sorted(dirpath.glob("*.grb"))
+        + sorted(dirpath.glob("*.nc"))
     )
 
     if not fallback:
         raise FileNotFoundError(
-            f"No GRIB or NetCDF files found in {directory}"
+            f"No GRIB or NetCDF files found in {dirpath}"
         )
 
     print(

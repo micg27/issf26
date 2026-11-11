@@ -9,10 +9,10 @@ def build(city):
 
     utils.banner(f"DAILY FEATURES: {city}")
 
-    in_dir = config.processed_dir(city)
+    indir = config.processed_dir(city)
 
     files = [
-        in_dir / f"{city}_hourly_{year}.nc"
+        indir / f"{city}_hourly_{year}.nc"
         for year in config.YEARS
     ]
 
@@ -29,10 +29,10 @@ def build(city):
 
     dims = utils.spatial_dims(ds)
 
-    city_mean = ds.mean(dim=dims) if dims else ds
+    citymean = ds.mean(dim=dims) if dims else ds
 
     df = (
-        city_mean[["u10", "v10", "blh"]]
+        citymean[["u10", "v10", "blh"]]
         .to_dataframe()
         .reset_index()
     )
@@ -46,11 +46,11 @@ def build(city):
 
     df["block"] = df["hour"].map(utils.assign_block)
     
-    hours_per_day = df.groupby("date").size()
+    hrsperday = df.groupby("date").size()
 
-    complete = hours_per_day[hours_per_day == 24].index
+    complete = hrsperday[hrsperday == 24].index
 
-    dropped = len(hours_per_day) - len(complete)
+    dropped = len(hrsperday) - len(complete)
 
     print(f"  Days with 24 hours: {len(complete)}  (dropped {dropped})")
 
@@ -72,14 +72,14 @@ def build(city):
 
     daily = pd.concat([u, v, pblh], axis=1)
 
-    expected_cols = set(config.FEATURES)
-    actual_cols = set(daily.columns)
+    expectedcols = set(config.FEATURES)
+    actualcols = set(daily.columns)
 
-    if expected_cols != actual_cols:
+    if expectedcols != actualcols:
         raise ValueError(
             f"Feature columns do not match config.FEATURES.\n"
-            f"  Missing: {expected_cols - actual_cols}\n"
-            f"  Extra:   {actual_cols - expected_cols}"
+            f"  Missing: {expectedcols - actualcols}\n"
+            f"  Extra:   {actualcols - expectedcols}"
         )
 
     daily = daily[config.FEATURES].reset_index()
@@ -97,7 +97,7 @@ def build(city):
     print("\n  Feature summary:")
     print(daily[config.FEATURES].describe().round(2).T.to_string())
 
-    out = in_dir / f"{city}_daily_features.csv"
+    out = indir / f"{city}_daily_features.csv"
 
     daily.to_csv(out, index=False)
 

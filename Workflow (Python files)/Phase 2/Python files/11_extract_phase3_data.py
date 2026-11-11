@@ -3,7 +3,7 @@ import xarray as xr
 import config
 import utils
 
-EXTRACT_VARS = ["u10", "v10", "blh"]
+VARS_OUT = ["u10", "v10", "blh"]
 
 def extract(city):
 
@@ -11,14 +11,14 @@ def extract(city):
 
     base = config.processed_dir(city)
 
-    manifest_path = base / f"{city}_phase3_days.csv"
+    manifestpath = base / f"{city}_phase3_days.csv"
 
-    if not manifest_path.exists():
+    if not manifestpath.exists():
         raise FileNotFoundError(
-            f"{manifest_path} is missing oops"
+            f"{manifestpath} is missing oops"
         )
 
-    selected = pd.read_csv(manifest_path, parse_dates=["date"])
+    selected = pd.read_csv(manifestpath, parse_dates=["date"])
 
     files = [
         base / f"{city}_hourly_{year}.nc"
@@ -28,8 +28,8 @@ def extract(city):
     ds = xr.open_mfdataset(files, combine="by_coords")
     ds = ds.sortby("time")
 
-    out_dir = base / "phase3_weather"
-    out_dir.mkdir(parents=True, exist_ok=True)
+    outdir = base / "phase3_weather"
+    outdir.mkdir(parents=True, exist_ok=True)
 
     records = []
     skipped = []
@@ -38,15 +38,15 @@ def extract(city):
 
         date = row["date"]
 
-        utc_start, utc_end = utils.local_day_bounds_utc(date, city)
+        utcstart, utcend = utils.local_day_bounds_utc(date, city)
 
-        day = ds.sel(time=slice(utc_start, utc_end))
+        day = ds.sel(time=slice(utcstart, utcend))
 
-        n_hours = day.sizes.get("time", 0)
+        nhours = day.sizes.get("time", 0)
 
-        if n_hours != 24:
+        if nhours != 24:
             print(
-                f"  SKIP {date.date()}: {n_hours} hours "
+                f"  SKIP {date.date()}: {nhours} hours "
                 f"(expected 24)"
             )
             skipped.append(str(date.date()))
@@ -56,9 +56,9 @@ def extract(city):
             f"{city}_{date.date()}_{row['regime']}_{row['split']}.nc"
         )
 
-        outfile = out_dir / filename
+        outfile = outdir / filename
 
-        subset = day[EXTRACT_VARS]
+        subset = day[VARS_OUT]
 
         subset.attrs.update(
             {
@@ -68,8 +68,8 @@ def extract(city):
                 "split": str(row["split"]),
                 "selection": str(row["selection"]),
                 "w_k": float(row["w_k"]),
-                "utc_start": str(utc_start),
-                "utc_end": str(utc_end),
+                "utc_start": str(utcstart),
+                "utc_end": str(utcend),
                 "use_dst": str(config.USE_DST),
             }
         )
@@ -96,10 +96,10 @@ def extract(city):
     out_manifest = pd.DataFrame(records)
 
     out_manifest.to_csv(
-        out_dir / f"{city}_phase3_manifest.csv", index=False
+        outdir / f"{city}_phase3_manifest.csv", index=False
     )
 
-    print(f"\n  Extracted {len(records)} days to {out_dir}")
+    print(f"\n  Extracted {len(records)} days to {outdir}")
 
     if skipped:
         print(f"  Skipped {len(skipped)}: {skipped}")
