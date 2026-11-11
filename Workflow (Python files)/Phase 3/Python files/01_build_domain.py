@@ -1,31 +1,4 @@
-# 01_build_domain.py
-"""
-Build each city's transport-model domain and its population field.
-
-The domain is a regular 2 km raster aligned exactly with the Phase 1
-candidate grid (same origin and cell edges) plus a margin on every side.
-Every domain cell gets:
-    population     WorldPop 2023 people in the full 2 km square
-    candidate_id   the Phase 1 grid `id` if the cell is a candidate, else -1
-    land_frac      fraction of the cell covered by the city's land polygons
-    land           land_frac >= 0.5, or any population (covers Johor/Batam,
-                   which have no land polygon here); used to keep synthetic
-                   point sources out of the sea
-
-Population is aggregated by assigning each ~100 m WorldPop pixel to the
-2 km cell containing its centre, so every person is counted exactly once
-(no double counting across cell edges) and totals are conserved.
-
-Outputs (data/processed/phase3/<city>/):
-    <city>_domain.nc        2D fields on the model raster
-    <city>_candidates.csv   one row per candidate cell (Phase 4/5 input)
-
-Usage:
-    python 01_build_domain.py --all
-"""
-
 import argparse
-
 import geopandas as gpd
 import numpy as np
 import pandas as pd
@@ -33,9 +6,7 @@ import rasterio
 import xarray as xr
 from pyproj import Transformer
 from shapely.geometry import box
-
 import config
-
 
 def parse_cities(description):
     parser = argparse.ArgumentParser(description=description)
@@ -58,22 +29,18 @@ def load_candidates(city, cfg):
     )
     return grid
 
-
 def build_domain(city):
     cfg = config.city_config(city)
     grid = load_candidates(city, cfg)
     dx = config.CELL_SIZE_M
     m = config.DOMAIN_MARGIN_CELLS
-
-    # Domain edges: candidate-grid bounding box + margin, on the grid's own
-    # cell edges so every candidate cell is exactly one domain cell.
     x0 = grid["left"].min() - m * dx
     y_top = grid["top"].max() + m * dx
     nx = int(round((grid["right"].max() - grid["left"].min()) / dx)) + 2 * m
     ny = int(round((grid["top"].max() - grid["bottom"].min()) / dx)) + 2 * m
 
-    x = x0 + dx * (np.arange(nx) + 0.5)          # cell centres, west -> east
-    y = y_top - dx * (np.arange(ny) + 0.5)       # cell centres, north -> south
+    x = x0 + dx * (np.arange(nx) + 0.5)         
+    y = y_top - dx * (np.arange(ny) + 0.5)    
 
     candidate_id = np.full((ny, nx), -1, dtype=np.int64)
     pct_land = np.zeros((ny, nx))
@@ -123,7 +90,6 @@ def build_domain(city):
 
 
 def land_fraction(cfg, x, y, dx):
-    """Exact fraction of each domain cell covered by the land polygons."""
     land = gpd.read_file(config.RAW_DIR / cfg["land_file"]).to_crs(cfg["crs"])
     half = dx / 2
     domain_box = box(x.min() - half, y.min() - half, x.max() + half, y.max() + half)
@@ -139,7 +105,6 @@ def land_fraction(cfg, x, y, dx):
 
 
 def aggregate_population(cfg, x0, y_top, nx, ny, dx):
-    """Sum WorldPop pixels (from every country raster) into domain cells."""
     pop = np.zeros((ny, nx))
     for name in cfg["pop_files"]:
         part = aggregate_one_raster(config.POP_DIR / name, cfg, x0, y_top, nx, ny, dx)
@@ -149,12 +114,8 @@ def aggregate_population(cfg, x0, y_top, nx, ny, dx):
 
 
 def aggregate_one_raster(path, cfg, x0, y_top, nx, ny, dx):
-    """Sum one raster's pixels into domain cells by pixel-centre location."""
     to_raster = Transformer.from_crs(cfg["crs"], "EPSG:4326", always_xy=True)
     to_city = Transformer.from_crs("EPSG:4326", cfg["crs"], always_xy=True)
-
-    # Read only the raster window covering the domain (the AUS file is the
-    # whole country), padded by a pixel so edge cells are complete.
     xs = [x0, x0 + nx * dx]
     ys = [y_top - ny * dx, y_top]
     lon, lat = to_raster.transform(*np.meshgrid(xs, ys))
