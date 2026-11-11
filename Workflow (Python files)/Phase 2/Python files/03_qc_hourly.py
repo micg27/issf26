@@ -1,16 +1,3 @@
-# 03_qc_hourly.py
-"""
-Quality control on the processed hourly files.
-
-Checks missing values, physical ranges, time continuity, and writes
-histograms plus a sample time series. Also writes a machine-readable
-qc_summary.csv you can cite in your methods section.
-
-Usage:
-    python 03_qc_hourly.py --all
-    python 03_qc_hourly.py --city singapore --year 2021
-"""
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -23,8 +10,6 @@ import xarray as xr
 import config
 import utils
 
-
-# Physically plausible ranges. Anything outside these is a red flag.
 PLAUSIBLE = {
     "u10": (-60.0, 60.0),
     "v10": (-60.0, 60.0),
@@ -33,7 +18,6 @@ PLAUSIBLE = {
     "t2m_c": (-30.0, 55.0),
     "tp": (0.0, 0.5),
 }
-
 
 def qc(city, year, records):
 
@@ -50,10 +34,6 @@ def qc(city, year, records):
     ds = xr.open_dataset(path)
 
     row = {"city": city, "year": year}
-
-    # -----------------------------------------------------
-    # 1. MISSING VALUES AND RANGES
-    # -----------------------------------------------------
 
     print(f"\n  {'variable':16s} {'missing':>10s} {'min':>12s} {'max':>12s}")
 
@@ -78,16 +58,12 @@ def qc(city, year, records):
 
         if minimum < low or maximum > high:
             print(
-                f"    WARNING: {var} outside plausible range "
+                f"    {var} outside plausible range "
                 f"[{low}, {high}]"
             )
 
     if float(ds["wind_speed"].min()) < 0:
         raise ValueError("Negative wind speed detected.")
-
-    # -----------------------------------------------------
-    # 2. TIME CONTINUITY
-    # -----------------------------------------------------
 
     times = pd.DatetimeIndex(ds["time"].values)
 
@@ -103,16 +79,8 @@ def qc(city, year, records):
     row["missing_timestamps"] = len(gaps)
     row["n_timesteps"] = len(times)
 
-    # -----------------------------------------------------
-    # 3. DOMAIN MEAN FOR PLOTS
-    # -----------------------------------------------------
-
     dims = utils.spatial_dims(ds)
     city_mean = ds.mean(dim=dims) if dims else ds
-
-    # -----------------------------------------------------
-    # 4. HISTOGRAMS
-    # -----------------------------------------------------
 
     for var in ["wind_speed", "blh", "t2m_c"]:
 
@@ -131,15 +99,6 @@ def qc(city, year, records):
         fig.savefig(out / f"{var}_histogram_{year}.png", dpi=200)
         plt.close(fig)
 
-    # -----------------------------------------------------
-    # 5. WIND ROSE SUBSTITUTE: u-v SCATTER
-    # -----------------------------------------------------
-    #
-    # A quick visual check that the wind distribution looks like the city
-    # you expect. Singapore should show a clear monsoon axis; Melbourne
-    # should look more isotropic with a strong westerly component.
-    # -----------------------------------------------------
-
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.scatter(
         city_mean["u10"].values.ravel(),
@@ -156,10 +115,6 @@ def qc(city, year, records):
     fig.tight_layout()
     fig.savefig(out / f"wind_uv_scatter_{year}.png", dpi=200)
     plt.close(fig)
-
-    # -----------------------------------------------------
-    # 6. ONE-MONTH SERIES
-    # -----------------------------------------------------
 
     month = city_mean.sel(
         time=slice(f"{year}-01-01", f"{year}-01-31 23:59")
