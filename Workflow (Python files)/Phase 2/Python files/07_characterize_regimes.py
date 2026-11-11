@@ -1,22 +1,3 @@
-# 07_characterize_regimes.py
-"""
-Describe each regime physically and compute the frequency weights
-w_k = n_k / N that Phase 3 uses to weight scenarios.
-
-Outputs:
-  <city>_regime_summary.csv            per-regime stats including w_k
-  <city>_regime_monthly_frequency.csv  seasonality check
-  <city>_regime_weights.json           w_k in a form Phase 3 can import
-  figures: diurnal wind vectors per regime, monthly occurrence
-
-The diurnal figure is the important one for interpretation: it shows how
-the wind vector rotates through the day in each regime, which is what
-distinguishes a sea-breeze regime from a synoptically forced one.
-
-Usage:
-    python 07_characterize_regimes.py --all
-"""
-
 import json
 
 import matplotlib
@@ -51,10 +32,6 @@ def characterize(city):
         parse_dates=["date"],
     )
 
-    # -----------------------------------------------------
-    # DERIVED QUANTITIES
-    # -----------------------------------------------------
-
     for block in range(1, config.N_BLOCKS + 1):
         daily[f"speed{block}"] = np.hypot(
             daily[f"u{block}"], daily[f"v{block}"]
@@ -66,10 +43,6 @@ def characterize(city):
 
     daily["mean_wind_speed"] = daily[speed_cols].mean(axis=1)
 
-    # Vector mean speed: the magnitude of the daily-mean wind vector.
-    # Much smaller than mean_wind_speed when the wind reverses during the
-    # day, so the ratio is a direct measure of diurnal reversal, which is
-    # exactly the sea-breeze signal you care about for Singapore.
     u_cols = [f"u{b}" for b in range(1, config.N_BLOCKS + 1)]
     v_cols = [f"v{b}" for b in range(1, config.N_BLOCKS + 1)]
 
@@ -84,10 +57,6 @@ def characterize(city):
         daily["vector_mean_speed"]
         / daily["mean_wind_speed"].replace(0, np.nan)
     )
-
-    # -----------------------------------------------------
-    # SUMMARY
-    # -----------------------------------------------------
 
     agg = {
         "n_days": ("date", "count"),
@@ -112,18 +81,11 @@ def characterize(city):
         base / f"{city}_regime_summary.csv", index=False
     )
 
-    # -----------------------------------------------------
-    # WEIGHTS FOR PHASE 3
-    # -----------------------------------------------------
-
     weights = dict(
         zip(summary["regime"], summary["w_k"].round(6))
     )
 
     total = float(sum(weights.values()))
-
-    if abs(total - 1.0) > 1e-6:
-        print(f"  WARNING: weights sum to {total}, not 1.")
 
     with open(base / f"{city}_regime_weights.json", "w") as f:
         json.dump(
@@ -136,10 +98,6 @@ def characterize(city):
             indent=2,
         )
 
-    # -----------------------------------------------------
-    # MONTHLY OCCURRENCE
-    # -----------------------------------------------------
-
     daily["month"] = daily["date"].dt.month
 
     monthly = pd.crosstab(
@@ -149,10 +107,6 @@ def characterize(city):
     monthly.to_csv(
         base / f"{city}_regime_monthly_frequency.csv"
     )
-
-    # -----------------------------------------------------
-    # FIGURE 1: DIURNAL WIND VECTORS BY REGIME
-    # -----------------------------------------------------
 
     regimes = sorted(daily["regime"].unique())
 
