@@ -1,18 +1,3 @@
-# 02_preprocess_hourly.py
-"""
-Raw ERA5 -> clean hourly NetCDF, one file per city per year.
-
-Replaces your 02_preprocess_hourly.py + the 02a_modification.py stub.
-The logic is now a function, so it loops over cities and years instead of
-requiring you to hand-edit CITY and YEAR and re-run.
-
-Also handles NetCDF input as well as GRIB.
-
-Usage:
-    python 02_preprocess_hourly.py --all
-    python 02_preprocess_hourly.py --city melbourne --year 2023
-"""
-
 import numpy as np
 import xarray as xr
 
@@ -37,10 +22,6 @@ def process(city, year):
     for file in files:
         print(f"    {file.name}")
 
-    # -----------------------------------------------------
-    # 1. OPEN AND COLLECT REQUIRED VARIABLES
-    # -----------------------------------------------------
-
     found = {}
 
     for file in files:
@@ -60,24 +41,12 @@ def process(city, year):
             f"Missing required variables for {city} {year}: {missing}\n"
             f"Found: {sorted(found)}"
         )
-
-    # -----------------------------------------------------
-    # 2. MERGE
-    # -----------------------------------------------------
-
+        
     ds = xr.merge(list(found.values()), join="inner")
 
     ds = utils.standardize_time(ds)
 
     ds = ds.sortby("time")
-
-    # -----------------------------------------------------
-    # 3. SUBSET TO THE TARGET YEAR
-    # -----------------------------------------------------
-    #
-    # Needed when the raw file spans several years (e.g. a single
-    # multi-year download).
-    # -----------------------------------------------------
 
     ds = ds.sel(time=str(year))
 
@@ -86,10 +55,6 @@ def process(city, year):
             f"No timesteps for {year} in the input files for {city}."
         )
 
-    # -----------------------------------------------------
-    # 4. DROP DUPLICATE TIMESTAMPS
-    # -----------------------------------------------------
-
     times = ds["time"].values
 
     if len(np.unique(times)) != len(times):
@@ -97,20 +62,12 @@ def process(city, year):
         _, keep = np.unique(times, return_index=True)
         ds = ds.isel(time=np.sort(keep))
 
-    # -----------------------------------------------------
-    # 5. DERIVED VARIABLES
-    # -----------------------------------------------------
-
     ds["wind_speed"] = np.hypot(ds["u10"], ds["v10"])
     ds["wind_speed"].attrs = {
         "long_name": "10 metre wind speed",
         "units": "m s-1",
     }
-
-    # Meteorological convention: direction the wind blows FROM.
-    # Kept for QC plots and reporting only. It is deliberately NOT a
-    # clustering feature: degrees wrap at 360, so k-means would treat
-    # 350 and 10 as far apart. Clustering uses u/v instead.
+    
     ds["wind_direction"] = (
         270.0 - np.degrees(np.arctan2(ds["v10"], ds["u10"]))
     ) % 360.0
@@ -125,17 +82,13 @@ def process(city, year):
         "units": "degree_Celsius",
     }
 
-    # -----------------------------------------------------
-    # 6. REPORT AND SAVE
-    # -----------------------------------------------------
-
     n_hours = ds.sizes["time"]
     expected = 8784 if year % 4 == 0 else 8760
 
     print(f"  Timesteps: {n_hours} (expected {expected})")
 
     if n_hours != expected:
-        print(f"  WARNING: {expected - n_hours} hours missing.")
+        print(f"  {expected - n_hours} hours missing.")
 
     dims = utils.spatial_dims(ds)
     print(f"  Grid dims: {[(d, ds.sizes[d]) for d in dims]}")
