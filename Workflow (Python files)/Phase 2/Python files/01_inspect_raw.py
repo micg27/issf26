@@ -1,15 +1,3 @@
-# 01_inspect_raw.py
-"""
-Inspect a raw ERA5 file before processing it.
-
-Generalised from your 01_inspect_grib.py so it also handles NetCDF, since
-the CDS API may return either format.
-
-Usage:
-    python 01_inspect_raw.py path/to/file.nc
-    python 01_inspect_raw.py path/to/file.grib
-"""
-
 import sys
 from pathlib import Path
 
@@ -70,8 +58,7 @@ def main():
             print(f"\nGRID: {sizes}  ->  {total} cells")
             if total < 4:
                 print(
-                    "  WARNING: very few grid cells. Check your bounding box "
-                    "against ERA5's 0.25 degree resolution."
+                    "Warning (for manual review)"
                 )
 
 
