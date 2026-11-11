@@ -1,21 +1,3 @@
-# 05_cluster_sweep.py
-"""
-Sweep candidate k values and report cluster-validity diagnostics, so the
-final choice of k is justified rather than assumed.
-
-Reports four things, because no single index is decisive:
-  - inertia          (elbow plot)
-  - silhouette       (higher is better)
-  - Calinski-Harabasz (higher is better)
-  - Davies-Bouldin   (LOWER is better)
-
-Plus cluster sizes, because a k that produces a 5-day cluster is useless
-for Phase 3 no matter how good its silhouette is.
-
-Usage:
-    python 05_cluster_sweep.py --all
-"""
-
 import matplotlib
 
 matplotlib.use("Agg")
@@ -93,18 +75,14 @@ def sweep(city):
 
     print("\n" + results.round(3).to_string(index=False))
 
-    # -----------------------------------------------------
-    # DIAGNOSTIC FIGURE
-    # -----------------------------------------------------
-
     fig, axes = plt.subplots(2, 2, figsize=(10, 7))
 
     panels = [
-        ("inertia", "Inertia (elbow)", axes[0][0]),
-        ("silhouette", "Silhouette (higher better)", axes[0][1]),
-        ("calinski_harabasz", "Calinski-Harabasz (higher better)",
+        ("inertia", "Inertia", axes[0][0]),
+        ("silhouette", "Silhouette", axes[0][1]),
+        ("calinski_harabasz", "Calinski-Harabasz",
          axes[1][0]),
-        ("davies_bouldin", "Davies-Bouldin (LOWER better)", axes[1][1]),
+        ("davies_bouldin", "Davies-Bouldin", axes[1][1]),
     ]
 
     for column, title, ax in panels:
@@ -118,36 +96,6 @@ def sweep(city):
     fig.tight_layout()
     fig.savefig(out / "cluster_validity.png", dpi=200)
     plt.close(fig)
-
-    print(f"\n  Figures and candidate labels saved to {out}")
-
-    # -----------------------------------------------------
-    # GUIDANCE
-    # -----------------------------------------------------
-
-    print(
-        "\n  Choose k by BOTH the metrics above and physical "
-        "interpretability."
-    )
-    print(
-        "  Inspect candidate_k*.csv, then run 07 on a trial k to see "
-        "whether the"
-    )
-    print(
-        "  regimes map onto real meteorology (monsoon phases for "
-        "Singapore;"
-    )
-    print(
-        "  frontal / northerly / onshore types for Melbourne). A cluster "
-        "holding"
-    )
-    print(
-        "  under ~5% of days is usually too rare to sample for Phase 3."
-    )
-    print(
-        f"\n  Then set CITIES['{city}']['final_k'] in config.py and run 06."
-    )
-
 
 def main():
 
