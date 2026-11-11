@@ -1,32 +1,3 @@
-# 00_download_era5.py
-"""
-Download ERA5 single-level data for every city and year.
-
-FIXES vs your original ERA5_data_script.py:
-  1. Years are 2021-2025 (from config), not 2020-2024. Your original window
-     was off by one year at both ends relative to the research plan.
-  2. Files are written per city AND per year into data/raw/meteorology/<city>/,
-     which is where script 02 looks for them. The original wrote one
-     multi-year file into the current working directory.
-  3. Uses 'data_format' (the current CDS API key). The old 'format' key is
-     ignored by the new CDS backend, which is why you may have received GRIB
-     when you asked for NetCDF.
-  4. Skips files that already exist, so an interrupted run can resume.
-  5. Requests one month at a time, then merges into a single per-year file.
-     A whole-year request (12 months x 31 days x 24 hours x 5 variables) is
-     rejected by the CDS backend with "403 cost limits exceeded"; a
-     one-month request is well under that limit.
-  6. Each monthly download actually arrives as a zip (despite the '.nc' name
-     and 'download_format: unarchived') because this variable mix spans two
-     GRIB stepTypes (instant: u10/v10/t2m/blh, accum: tp), and CDS splits
-     those into separate files inside the zip. This script transparently
-     unzips, merges the stepType groups, and concatenates months, so the
-     final per-year file on disk is genuine single-group NetCDF and script
-     02 needs no changes.
-
-Requires a ~/.cdsapirc with your CDS credentials.
-"""
-
 import zipfile
 from tempfile import TemporaryDirectory
 
