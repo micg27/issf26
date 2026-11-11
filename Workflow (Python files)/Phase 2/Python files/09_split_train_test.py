@@ -1,26 +1,3 @@
-# 09_split_train_test.py
-"""
-Assign every day to train or test.
-
-Two modes, set by config.SPLIT_MODE:
-
-  "stratified_random"
-      Random days, stratified so each regime keeps its proportions.
-      Caveat worth stating in your methods: consecutive days are
-      meteorologically correlated, so a random split leaks information
-      between train and test. Day 100 in train and day 101 in test are
-      not independent samples.
-
-  "temporal"
-      Hold out whole years (config.HOLDOUT_YEARS). Cleaner independence,
-      and the more defensible choice if a judge asks. The trade-off is
-      that regime proportions in the held-out year may differ from the
-      training years, which is itself informative.
-
-Usage:
-    python 09_split_train_test.py --all
-"""
-
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
@@ -68,11 +45,7 @@ def split(city):
         raise ValueError(
             f"Unknown SPLIT_MODE: {config.SPLIT_MODE!r}"
         )
-
-    # -----------------------------------------------------
-    # CHECK EVERY REGIME APPEARS IN BOTH SPLITS
-    # -----------------------------------------------------
-
+      
     table = pd.crosstab(daily["regime"], daily["split"])
 
     for column in ["train", "test"]:
@@ -80,12 +53,7 @@ def split(city):
             raise ValueError(f"No days assigned to {column}.")
 
     empty = table[(table["train"] == 0) | (table["test"] == 0)]
-
-    if len(empty):
-        print(
-            f"  WARNING: some regimes are absent from one split:\n{empty}"
-        )
-
+  
     daily.to_csv(
         base / f"{city}_regimes_split.csv", index=False
     )
