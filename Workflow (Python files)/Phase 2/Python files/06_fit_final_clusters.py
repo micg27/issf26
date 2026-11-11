@@ -1,22 +1,3 @@
-# 06_fit_final_clusters.py
-"""
-Fit the final k-means model and persist everything downstream needs.
-
-Writes:
-  <city>_regimes.csv                        daily features + regime + cluster_index
-  <city>_cluster_centroids_standardized.csv centroids in z-space
-  <city>_cluster_centroids_physical.csv     centroids in original units
-  <city>_scaler.json                        mean/scale for reuse
-
-FIX vs your original: the raw 0-indexed cluster label is now stored as its
-own column. Script 08 previously recovered it by alphabetically sorting
-regime strings ("SIN1".."SIN4"), which works only while k < 10 and would
-silently mis-assign centroids at k >= 10.
-
-Usage:
-    python 06_fit_final_clusters.py --all
-"""
-
 import json
 
 import numpy as np
@@ -63,16 +44,7 @@ def fit(city):
     )
 
     labels = model.fit_predict(Z)
-
-    # -----------------------------------------------------
-    # ORDER CLUSTERS BY FREQUENCY
-    # -----------------------------------------------------
-    #
-    # Makes labels stable and readable: regime 1 is always the most common.
-    # Without this, k-means index order is arbitrary and the meaning of
-    # "SIN1" could change if you re-run with a different seed.
-    # -----------------------------------------------------
-
+  
     order = (
         pd.Series(labels)
         .value_counts()
@@ -92,10 +64,6 @@ def fit(city):
     daily["regime"] = [f"{prefix}{i + 1}" for i in cluster_index]
 
     daily.to_csv(base / f"{city}_regimes.csv", index=False)
-
-    # -----------------------------------------------------
-    # CENTROIDS
-    # -----------------------------------------------------
 
     centroids = pd.DataFrame(centers, columns=config.FEATURES)
     centroids.insert(0, "cluster_index", range(final_k))
@@ -122,10 +90,6 @@ def fit(city):
         index=False,
     )
 
-    # -----------------------------------------------------
-    # SCALER
-    # -----------------------------------------------------
-
     with open(base / f"{city}_scaler.json", "w") as f:
         json.dump(
             {
@@ -139,10 +103,6 @@ def fit(city):
             f,
             indent=2,
         )
-
-    # -----------------------------------------------------
-    # REPORT
-    # -----------------------------------------------------
 
     counts = daily["regime"].value_counts().sort_index()
 
@@ -161,14 +121,12 @@ def fit(city):
 
     print(f"\n  Saved outputs to {base}")
 
-
 def main():
 
     cities = utils.parse_cities("Fit final k-means clusters.")
 
     for city in cities:
         fit(city)
-
 
 if __name__ == "__main__":
     main()
