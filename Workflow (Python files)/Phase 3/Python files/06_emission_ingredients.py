@@ -1,44 +1,10 @@
-# 06_emission_ingredients.py
-"""
-Emission-predictability experiment (pre-stated in METHODS.md, 2026-10-04):
-simulate each emission INGREDIENT once per day, so any mix of them can be
-assembled later by linear superposition. Concentration is linear in
-emissions, and a spatially uniform background cancels from every
-reconstruction error, so local responses are all Phase 5 needs.
-
-Tracers per day (31), each driven by that day's real weather with the
-same 24 h spin-up, calibration and solver as 04_generate_scenarios.py:
-    0        base: alpha x population
-    1..20    base x independent mean-one lognormal noise per cell (sigma 0.5)
-    21..25   unit (1 ug/s) source at each fixed site of set A
-    26..30   unit source at each fixed site of set B
-Fixed sites: J = 5 land cells per set, drawn once per city from the
-domain land mask (seeded). They are the same on every day.
-
-Stored: daily-mean local PM2.5 at candidate cells, per tracer.
-
-Output: data/processed/phase3/<city>/<city>_ingredients_<period>.nc
-    response (day, tracer, cell), base_total_ug_s, site rows/cols,
-    date, regime, split, w_k
-
---k (Phase 8 sensitivity): run with diffusivity K (m2/s) instead of the
-calibrated value; everything else is unchanged. Files get a "_K<value>" tag.
-
-Usage:
-    python 06_emission_ingredients.py --all --period train
-    python 06_emission_ingredients.py --all --period test2025
-    python 06_emission_ingredients.py --city singapore --period train --k 8000
-"""
-
 import argparse
 import importlib.util
 import json
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import xarray as xr
-
 import config
 import transport
 
@@ -111,7 +77,7 @@ def run(city, period, k_override=None):
     for k, name in enumerate(SITE_SETS):
         r, c = sites[name]
         for j in range(SITES_PER_SET):
-            site_emis[k * SITES_PER_SET + j, r[j], c[j]] = 1.0          # 1 ug/s
+            site_emis[k * SITES_PER_SET + j, r[j], c[j]] = 1.0       
 
     for d, row in days.iterrows():
         emis = np.empty((n_tr, ny, nx))
