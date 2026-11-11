@@ -1,57 +1,10 @@
-# 05_extend_test_days.py
-"""
-POST-RESULTS EXTENSION (added 2026-10-03, after the pre-registered Phase 5
-result existed): simulate EVERY day of the 2025 test year, not just the
-18-19 days Phase 2 sampled, to narrow the Phase 5 confidence intervals.
-
-Why: Phase 5's CIs were wide because only 18-19 test days were simulated.
-The extension changes nothing that selects networks. Phase 4 still
-chooses sensors from the same 2021-2024 training maps, and the
-pre-registered result on the original test days is kept and reported
-alongside. The extension only adds test days.
-
-Same model, calibration, spin-up and emission-scenario design as
-04_generate_scenarios.py (whose functions are reused). Differences:
-  * days: all 2025 local days, each with its Phase 2 regime label;
-  * random streams are seeded by (RANDOM_SEED, 2025, day-of-year,
-    member), so they are distinct from the original runs. The base member
-    (0) is deterministic and identical for days in both sets;
-  * only DAILY-MEAN maps are stored (Phase 5 scores daily means), which is
-    24x smaller than hourly;
-  * background b_d = that day's mean observed PM2.5 over the in-domain
-    stations. It is uniform in space, so it cancels exactly from every
-    reconstruction error (kriging weights sum to 1). It is stored only so
-    that `pm25_daily` is a realistic total.
-
---period train (added 2026-10-03, also post-results, pre-stated in
-METHODS.md): the same for EVERY 2021-2024 training day, so Phase 4 can choose
-networks from ~1,460 days instead of 44-45. Seeds use the day's own year,
-so they never collide with the 2025 runs.
-
-Output: data/processed/phase3/<city>/<city>_scenarios_2025_all.nc
-        (or <city>_scenarios_train_all.nc with --period train)
-    local_pm25_daily (day, member, cell), pm25_daily (day, member, cell),
-    emission_total (day, member), date, regime, split, w_k, cell_id/x/y
-
---k (Phase 8 sensitivity, pre-stated in METHODS.md 2026-10-25): run with
-diffusivity K (m2/s) instead of the calibrated value. Everything else,
-including alpha and every random draw, is unchanged, so the runs are paired
-with the headline ones. Files get a "_K<value>" tag.
-
-Usage:
-    python 05_extend_test_days.py --all
-    python 05_extend_test_days.py --city melbourne --period train --k 200
-"""
-
 import argparse
 import importlib.util
 import json
 from pathlib import Path
-
 import numpy as np
 import pandas as pd
 import xarray as xr
-
 import config
 import transport
 
@@ -105,8 +58,8 @@ def extend(city, period, k_override=None):
         days = regimes[regimes["split"] == "train"]
         assert days["date"].dt.year.max() < YEAR
     days = days[["date", "regime", "split"]].reset_index(drop=True)
-    # The weather record starts 1 Jan 2021 00:00 UTC; days whose 24 h spin-up
-    # would start before that can't be simulated the same way, so skip them.
+    # weather record starts 1 Jan 2021 00:00 UTC, but their 24h spin-up
+    # starts before that can't be simulated the same way, so skip them
     first_utc = pd.Timestamp(f"{config.phase2.START_YEAR}-01-01")
     spin_start = (days["date"] - pd.Timedelta(hours=cfg["utc_offset_hours"])
                   - pd.Timedelta(hours=gen.SPINUP_HOURS))
@@ -151,7 +104,7 @@ def extend(city, period, k_override=None):
         met = transport.load_met(city, config.PHASE2_DIR, utc_start, utc_end)
         fields = transport.met_to_domain(met, domain)
         r = transport.run(fields, dx, flux, np.full(n_mem + 1, lam), K, bgv, c0, sample_cells=cells)
-        s = r["samples"][gen.SPINUP_HOURS:].mean(axis=0)          # daily mean, (n_mem+1, C)
+        s = r["samples"][gen.SPINUP_HOURS:].mean(axis=0)         
         local[d] = s[:n_mem]
         bg_resp[d] = s[n_mem]
         print(f"  {d + 1}/{D} {row['date'].date()} {row['regime']}", end="\r", flush=True)
