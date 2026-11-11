@@ -1,34 +1,4 @@
-"""Build the Melbourne Urban Growth Boundary (UGB) polygon for the Phase 1 candidate grid.
 
-Vicmap's UGB line layer (PLAN_UGB) can't be polygonized: the lines have
-multi-km gaps (along the coast and in several inland stretches), so the
-only closed loops are small enclaves. Instead we use the polygon layer
-PLAN_UGA and subtract its "outside the UGB" polygons from the metro
-council (LGA) area:
-
-    inside UGB = dissolve(metro LGAs) - dissolve(PLAN_UGA where zone_code == "UGBA")
-
-PLAN_UGA also holds zone_code "GAIC" polygons (Growth Areas Infrastructure
-Contribution) -- these are growth suburbs *inside* the UGB (e.g. Aintree)
-and must NOT be subtracted.
-
-The raw difference leaves ~3,200 slivers where LGA and UGA edges are not
-exactly aligned (median width ~0 m, 95th percentile ~3 m). These are
-removed by a small morphological opening, then dropping parts and holes
-under 0.1 km^2 -- far below what can affect a 2 km (4 km^2) grid cell.
-
-Parts whose edges mostly don't follow either the UGB line or the metro
-outer edge (coast / non-metro councils) are kept, but also written to a
-`review_pieces` layer for a visual check in QGIS.
-
-Inputs (statewide, EPSG:7855, from the Vicmap open-data WFS at
-opendata.maps.vic.gov.au, layers open-data-platform:{plan_ugb,plan_uga,lga_polygon}):
-    data/raw/boundaries/melbourne/{plan_ugb,plan_uga,lga_polygon}/
-Output:
-    data/raw/boundaries/melbourne/UGB_polygon.gpkg
-        layer ugb_polygon    -- one feature, the cleaned inside-UGB area
-        layer review_pieces  -- parts to eyeball against a basemap
-"""
 from pathlib import Path
 
 import geopandas as gpd
@@ -40,8 +10,6 @@ BOUNDARIES = ROOT / "data" / "raw" / "boundaries" / "melbourne"
 OUT = BOUNDARIES / "UGB_polygon.gpkg"
 CRS = "EPSG:7855"
 
-# 31 metropolitan Melbourne councils + Mitchell (the UGB extends into it
-# at Beveridge/Wallan).
 METRO_LGAS = [
     "BANYULE", "BAYSIDE", "BOROONDARA", "BRIMBANK", "CARDINIA", "CASEY",
     "DAREBIN", "FRANKSTON", "GLEN EIRA", "GREATER DANDENONG", "HOBSONS BAY",
@@ -51,10 +19,10 @@ METRO_LGAS = [
     "WHITEHORSE", "WHITTLESEA", "WYNDHAM", "YARRA", "YARRA RANGES",
 ]
 
-OPENING_M = 10          # removes slivers/spikes narrower than 2 * OPENING_M
-MIN_AREA_M2 = 100_000   # 0.1 km^2: drop smaller parts, fill smaller holes
-EDGE_TOL_M = 5          # how close a boundary must be to count as "on" a line
-REVIEW_THRESHOLD = 0.5  # flag parts with < 50% of their edge on UGB line or metro edge
+OPENING_M = 10
+MIN_AREA_M2 = 100_000
+EDGE_TOL_M = 5
+REVIEW_THRESHOLD = 0.5
 
 
 def load(name):
