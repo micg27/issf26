@@ -2,9 +2,7 @@
 """
 Shared helpers for Phase 2.
 
-Keeping time-zone conversion in ONE place matters: scripts 04 and 11 must
-use identical local-time logic, or the days you cluster will not be the
-days you extract for Phase 3.
+**script 4 and 11 must use same local time
 """
 
 import argparse
@@ -14,9 +12,9 @@ import pandas as pd
 import config
 
 
-# ---------------------------------------------------------
-# COMMAND-LINE INTERFACE
-# ---------------------------------------------------------
+
+# command interface
+
 
 def parse_cities(desc, withyear=False):
     """Standard CLI: --city singapore | --all [--year 2021]"""
@@ -56,9 +54,9 @@ def parse_cities(desc, withyear=False):
     return cities
 
 
-# ---------------------------------------------------------
-# TIME CONVERSION
-# ---------------------------------------------------------
+
+# time conversion
+
 
 def to_local(times, city):
     """UTC timestamps -> naive local timestamps for this city."""
@@ -116,9 +114,9 @@ def assign_block(hour):
     return int(hour) // config.BLOCK_HRS + 1
 
 
-# ---------------------------------------------------------
-# DATA LOADING
-# ---------------------------------------------------------
+
+# data loading
+
 
 def find_raw_files(city, year):
     """
@@ -149,8 +147,8 @@ def find_raw_files(city, year):
     if files:
         return files
 
-    # Fall back to any multi-year file in the folder; the caller will
-    # subset by year after opening.
+    # fall back to any multi-year file in the folder, the caller will
+    # subset by year after opening
     fallback = (
         sorted(dirpath.glob("*.grib"))
         + sorted(dirpath.glob("*.grb"))
