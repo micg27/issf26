@@ -85,17 +85,11 @@ def city_config(city):
 
 
 
-# PM2.5 OBSERVATIONS
-# ---------------------------------------------------------
+# pm2.5 observations
+# SG NEA releases data by region, not by individual stations
+# the coordinates below are the coordinates for each region
+# as published by NEA
 
-# Singapore's NEA data is reported per REGION, not per station. The
-# coordinates below are the region "label locations" NEA itself publishes
-# in the data.gov.sg PM2.5 API (regionMetadata, fetched 2026-10-01 from
-# https://api-open.data.gov.sg/v2/real-time/api/pm25). They are where NEA
-# draws each region on its map, not monitoring-station sites: treating a
-# regional reading as a point reading there is an approximation, stated
-# as such in the methodology.
-# ---------------------------------------------------------
 
 
 SG_REGIONS = {
@@ -108,66 +102,37 @@ SG_REGIONS = {
 
 SG_PM_FILE = "Historical1hrPM2.5 (Singapore).csv"
 MEL_PM_GLOB = "*_All_sites_air_quality_hourly_avg_*.xlsx"
-
-# EPA Victoria's PM2.5 column name changes mid-record (see CLAUDE.md):
-# BPM2.5 = raw BAM reading, SBPM25 = same instrument, STP-corrected.
+# epa vic's pm2.5 column changes name mid episode
 MEL_PM_COLS = ["BPM2.5", "SBPM25"]
 
-# Plausibility bounds for hourly PM2.5 (ug/m3).
-# Small negative values are kept on purpose: 7.7% of Melbourne's hourly
-# BAM readings are negative, almost all slightly (median -1.2, 95% above
-# -5.1). That is the instrument's random noise around low true
-# concentrations, and dropping it would bias clean-air hours upward. Only
-# readings below -10 (189 of 412,687: instrument faults) are removed.
-# > 1000 does not occur outside instrument faults even in bushfire smoke.
 PM25_MIN = -10.0
 PM25_MAX = 1000.0
 
 
-# ---------------------------------------------------------
-# TRANSPORT MODEL
-# ---------------------------------------------------------
-#
-# Horizontal eddy diffusivity K is FIXED, not calibrated. A diagnostic
-# grid search (03_calibrate.py --k-grid) shows the station data barely
-# constrain it: across K = 100 to 30,000 m2/s the train RMSE changes by
-# < 1% in Singapore (5.32 -> 5.26 ug/m3) and 1.2% in Melbourne
-# (4.43 -> 4.37), in both drifting toward the smoothest field. About 43% of hourly PM2.5 variance is station-level
-# noise, and least squares on noisy data mildly rewards a structureless
-# prediction. The networks (5 regional values / 9 stations) cannot
-# identify K, so a physically based value is used and tested in Phase 8.
-#
-# The value follows US EPA CMAQ's horizontal-diffusion scheme
-# (CCTM/src/hdiff/multiscale/hcdiff3d.F): diffusivity is bounded below
-# by KHMIN = 200 m2/s and above by a resolution-scaled cap
-# KH * (4 km / dx)^2 = 2000 * (4/2)^2 = 8000 m2/s at our 2 km grid.
-# The central value is about the geometric mean of those bounds. The
-# bounds themselves are the Phase 8 sensitivity cases.
-# ---------------------------------------------------------
+
+# transport model
+# values for K are taken from US EPA CMAQ's horizontal-diffusion scheme
+# (CCTM/src/hdiff/multiscale/hcdiff3d.F). upper and lower bounds are 
+# used for Phase 8, and the K value for the rest of the experiment is 
+# approximately the geometric mean
 
 K_M2S = 1000.0
 K_SENS_M2S = [200.0, 8000.0]
 
 
-# ---------------------------------------------------------
-# SCENARIOS (04_generate_scenarios.py)
-# ---------------------------------------------------------
-#
-# Every Phase 2 day gets one BASE scenario (calibrated population-driven
-# emissions) plus N_SYNTHETIC synthetic emission scenarios, all run with
-# that day's real weather. Synthetic emissions keep the same expected
+# scenarios (04_generate_scenarios.py)
+# every Phase 2 day gets one base scenario (calibrated population-driven
+# emissions) and N_SYNTHETIC synthetic emission scenarios, run with
+# that day's real weather. synthetic emissions keep the same expected
 # total as the base case but redistribute it:
-#   * area sources: base emissions x mean-one lognormal noise per cell
-#     (SYNTH_AREA_SIGMA) -- neighbourhood-level uncertainty in the
-#     population proxy;
-#   * point sources: a Poisson number (mean SYNTH_POINT_MEAN_COUNT) placed
+#   for area sources: base emissions and log-normal distributed noise per cell
+#     (SYNTH_AREA_SIGMA) -- uncertainty in the population estimate
+#   for point sources: a Poisson number (mean SYNTH_POINT_MEAN_COUNT) placed
 #     uniformly at random on land cells, with lognormal magnitudes
 #     (SYNTH_POINT_SIGMA) whose expected total is SYNTH_POINT_SHARE of all
-#     emissions -- stand-ins for industry, ports, construction and fires,
-#     which a population proxy can't place (Jurong Island has ~0 people).
-# These parameters are modelling choices, not fitted values; they are
-# Phase 8 sensitivity candidates.
-# ---------------------------------------------------------
+#     emissions. these are replacements for industry, ports, construction and fires,
+#     which a population estimate cannot place (Jurong Island has ~0 residents).
+
 
 N_SYNTH = 20
 SYN_AREA_SIG = 0.5
