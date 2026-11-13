@@ -161,9 +161,8 @@ def characterize(city):
     fig.savefig(out / "regime_diurnal_wind.png", dpi=200)
     plt.close(fig)
 
-    # -----------------------------------------------------
-    # FIGURE 2: MONTHLY OCCURRENCE
-    # -----------------------------------------------------
+    # monthly occurence
+ 
 
     fig, ax = plt.subplots(figsize=(8, 4))
 
@@ -177,9 +176,9 @@ def characterize(city):
     fig.savefig(out / "regime_monthly_frequency.png", dpi=200)
     plt.close(fig)
 
-    # -----------------------------------------------------
-    # REPORT
-    # -----------------------------------------------------
+
+    # report
+
 
     display = summary[
         [
