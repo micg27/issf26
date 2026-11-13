@@ -1,10 +1,9 @@
-# networks.py
 """
-Shared machinery for Phase 4-5: the daily-mean maps, the kriging
+shared maps and code for Phase 4-5. the daily-mean maps, the kriging
 reconstruction every strategy is scored with, and the network-selection
 algorithms.
 
-Notation
+notation
     C        number of candidate cells
     X        (maps, C) daily-mean PM2.5 maps, one per (day, emission member)
     w        (maps,) map weights: each regime contributes its frequency w_k,
@@ -12,21 +11,6 @@ Notation
     S        list of selected candidate indices (columns of X)
     sigma2   sensor noise variance
 
-Reconstruction is ORDINARY KRIGING with an exponential covariance fitted to
-the training maps. It is linear: x_hat = W x_S, where W is (C, |S|) and
-each row sums to 1. Because of that row sum, a spatially uniform
-background (the daily b_d) cancels out of the error exactly. So the
-error depends only on each map's deviation from its own spatial mean.
-
-Expected error under sensor noise eps ~ N(0, sigma2 I) is exact, no
-sampling needed:
-    E ||x - W (x_S + eps)||^2 = ||x - W x_S||^2 + sigma2 ||W||_F^2
-and over the weighted ensemble, with Sigma = sum_m w_m x~_m x~_m^T
-(x~ = map minus its spatial mean),
-    MSE(S) = [ tr Sigma - 2 tr(W Sigma[S,:]) + tr(W Sigma[S,S] W^T)
-               + sigma2 ||W||_F^2 ] / C.
-RMSE(S) = sqrt(MSE(S)): the root of the weighted mean squared error over
-all maps and cells.
 """
 
 import numpy as np
@@ -39,9 +23,9 @@ from sklearn.cluster import KMeans
 import config
 
 
-# ---------------------------------------------------------
-# DATA
-# ---------------------------------------------------------
+
+# data
+
 
 def _meta(dates, regimes, splits, w_k, M):
     D = len(dates)
@@ -72,20 +56,10 @@ def _load_extension(city, name, C, cellids, k_tag=""):
 
 
 def load_maps(city, testset="selected", trainset="selected", k_tag=""):
-    """Daily-mean maps and regime weights, split into train and test.
-
-    test_set="selected" (pre-registered): the 18-19 test days Phase 2
-    sampled. test_set="all2025" (post-results extension): every 2025 day.
-    train_set="selected" (pre-registered): the 44-45 sampled training days.
-    train_set="all" (post-results extension): every 2021-2024 day.
-    Extensions come from Phase 3's 05_extend_test_days.py.
-    k_tag (Phase 8, e.g. "_K200"): read the extensions simulated at another K;
-    needs test_set="all2025" and train_set="all".
-    """
     if k_tag and (testset != "all2025" or trainset != "all"):
         raise ValueError("Phase 8 K runs exist only for all training and all 2025 days")
     ds = xr.open_dataset(config.P3_DIR / city / f"{city}_scenarios.nc")
-    daily = ds["pm25"].mean("hour").values                 # (day, member, cell)
+    daily = ds["pm25"].mean("hour").values                 
     D, M, C = daily.shape
     meta = _meta(ds["date"].values, ds["regime"].values, ds["split"].values, ds["w_k"].values, M)
     X = daily.reshape(D * M, C).astype(float)
@@ -116,24 +90,18 @@ def second_moment(X, w):
 
 
 def spatial_sd(X, w):
-    """Weighted mean (over maps) of each map's spatial standard deviation."""
     return float(np.sum(w * X.std(axis=1)))
 
 
-# ---------------------------------------------------------
-# KRIGING
-# ---------------------------------------------------------
+
+# kriging
+
 
 def exponential(h, nugget, sill, rng):
     return nugget + sill * (1 - np.exp(-h / rng))
 
 
 def fit_variogram(cells, Sigma):
-    """Exponential variogram fitted to the weighted mean semivariogram.
-
-    The mean semivariance between cells i and j over the ensemble is
-    (Sigma_ii + Sigma_jj - 2 Sigma_ij) / 2, so no per-map loop is needed.
-    """
     xy = cells[["x", "y"]].to_numpy()
     d = np.hypot(*(xy[:, None, :] - xy[None, :, :]).transpose(2, 0, 1))
     g = 0.5 * (np.diag(Sigma)[:, None] + np.diag(Sigma)[None, :] - 2 * Sigma)
@@ -157,31 +125,26 @@ def fit_variogram(cells, Sigma):
 
 
 def covariance(cells, vg):
-    """Covariance between candidate cells (structured part only)."""
     xy = cells[["x", "y"]].to_numpy()
     d = np.hypot(*(xy[:, None, :] - xy[None, :, :]).transpose(2, 0, 1))
     return vg["sill"] * np.exp(-d / vg["range_m"])
 
 
 def sensor_variance(vg, sigma2):
-    """Extra variance on the sensor block: fitted nugget + sensor noise."""
-    return vg["nugget"] + sigma2 + 1e-9 * vg["sill"]      # tiny jitter for f = 0
-
+    return vg["nugget"] + sigma2 + 1e-9 * vg["sill"]      
 
 def ok_weights(K, S, extravar):
-    """Ordinary kriging weights W (C, |S|), computed directly."""
     S = list(S)
     n = len(S)
     A = np.zeros((n + 1, n + 1))
     A[0, 1:] = A[1:, 0] = 1.0
     A[1:, 1:] = K[np.ix_(S, S)] + extravar * np.eye(n)
     R = np.column_stack([np.ones(K.shape[0]), K[:, S]])
-    G = np.linalg.solve(A, R.T).T                       # A symmetric
+    G = np.linalg.solve(A, R.T).T                      
     return G[:, 1:]
 
 
 def map_mse(X, S, W, sigma2):
-    """Expected MSE per map (rows of X) for network S with weights W."""
     resid = X - X[:, S] @ W.T
     return np.mean(resid**2, axis=1) + sigma2 * np.sum(W**2) / X.shape[1]
 
@@ -191,31 +154,17 @@ def ensemble_rmse(X, w, S, K, vg, sigma2):
     return float(np.sqrt(np.sum(w * map_mse(X, S, W, sigma2))))
 
 
-# ---------------------------------------------------------
-# STRATEGY 1: GREEDY RMSE MINIMISATION (S_met)
-# ---------------------------------------------------------
+
+# strategy 1: greedy rmse minimisation (S_met)
+
 
 def greedy_rmse(K, Sigma, vg, sigma2, nmax):
-    """Forward greedy selection minimising the ensemble kriging MSE.
-
-    Exact, but evaluates every candidate at every step with rank-one
-    updates of the bordered kriging matrix, O(C n) per candidate instead
-    of O(n^3 + C n^2). Returns the selection order and MSE after each step.
-
-    State for current network S (n sensors), index 0 = the OK constraint:
-        Minv = inverse of [[0, 1^T], [1, K_SS + v I]]   ((n+1) x (n+1))
-        G    = [1, K[:, S]] @ Minv                       (C x (n+1))
-        W    = G[:, 1:]                                  kriging weights
-    Adding candidate c with b = [1; K[S, c]], d = K_cc + v:
-        u = Minv b,  s = d - b.u,  e = K[:, c] - G b,  a = u[1:] / s
-        W' = [W - e a^T, e / s]
-    """
     C = K.shape[0]
     v = sensor_variance(vg, sigma2)
     trS = np.trace(Sigma)
     diagK = np.diag(K) + v
 
-    # Step 1, direct: with one sensor every prediction equals that reading.
+    
     mse1 = (trS - 2 * Sigma.sum(axis=0) + C * np.diag(Sigma) + sigma2 * C) / C
     first = int(np.argmin(mse1))
     S = [first]
@@ -227,20 +176,20 @@ def greedy_rmse(K, Sigma, vg, sigma2, nmax):
     avail[first] = False
     while len(S) < nmax:
         W = G[:, 1:]
-        SigS = Sigma[:, S]                                   # (C, n)
+        SigS = Sigma[:, S]                                   
         SigSS = Sigma[np.ix_(S, S)]
-        H = W @ SigSS                                        # (C, n)
+        H = W @ SigSS                                       
         L0 = np.sum(W * SigS)
         Q0 = np.sum(H * W)
         F0 = np.sum(W**2)
 
         cand = np.nonzero(avail)[0]
-        B = np.vstack([np.ones(len(cand)), K[np.ix_(S, cand)]])   # (n+1, Nc)
+        B = np.vstack([np.ones(len(cand)), K[np.ix_(S, cand)]])   
         U = Minv @ B
         s = diagK[cand] - np.sum(B * U, axis=0)
-        E = K[:, cand] - G @ B                                     # (C, Nc)
-        A = U[1:] / s                                              # (n, Nc)
-        Qm = Sigma[np.ix_(S, cand)]                                # (n, Nc)
+        E = K[:, cand] - G @ B                                   
+        A = U[1:] / s                                            
+        Qm = Sigma[np.ix_(S, cand)]                               
         ee = np.sum(E**2, axis=0)
 
         L = L0 - np.sum(E * (SigS @ A), axis=0) + np.sum(E * Sigma[:, cand], axis=0) / s
@@ -265,26 +214,15 @@ def greedy_rmse(K, Sigma, vg, sigma2, nmax):
     return S, history
 
 
-# ---------------------------------------------------------
-# STRATEGY 2: POD + QR PIVOTING (S_met, literature check)
-# ---------------------------------------------------------
+
+# strategy 2: pod + qr pivoting (S_met, literature check)
 
 def pod_modes(X, w):
-    """Spatial POD modes (C, rank) of the weighted, per-map-centred maps."""
     _, sv, Vt = np.linalg.svd(np.sqrt(w)[:, None] * centred(X), full_matrices=False)
     return Vt.T, sv
 
 
 def qr_network(modes, n):
-    """n sensors from r = n // QR_OVERSAMPLING modes (Manohar et al. 2018).
-
-    The first r sensors are QR column pivots of Psi_r^T. QR pivoting alone
-    gives at most r useful pivots, so the remaining n - r are added
-    greedily, maximising det(Theta^T Theta) (Theta = Psi_r rows at the
-    sensors). Each step adds the candidate with the largest leverage
-    psi_c^T (Theta^T Theta)^-1 psi_c, which is the same volume-maximising
-    criterion QR pivoting approximates.
-    """
     r = max(1, n // config.QR_OVERSAMPLE)
     Psi = modes[:, :r]
     _, _, piv = qr(Psi.T, pivoting=True, mode="economic")
@@ -302,9 +240,6 @@ def qr_network(modes, n):
 
 
 def pod_rmse(X, w, S, modes, sigma2):
-    """QR's native reconstruction (Manohar et al. 2018): least squares on a
-    constant plus r = N // QR_OVERSAMPLING POD modes. Used only as a check
-    that QR isn't being judged unfairly by the shared kriging."""
     C = X.shape[1]
     r = max(1, len(S) // config.QR_OVERSAMPLE)
     B = np.column_stack([np.ones(C), modes[:, :r]])
@@ -313,13 +248,10 @@ def pod_rmse(X, w, S, modes, sigma2):
     return float(np.sqrt(np.sum(w * mse)))
 
 
-# ---------------------------------------------------------
-# BASELINES
-# ---------------------------------------------------------
+
+# baselines
 
 def kmeans_network(cells, n, seed):
-    """Spatial coverage (Walvoort et al. 2010): k-means on cell coordinates,
-    then the candidate cell nearest each cluster centre (no repeats)."""
     xy = cells[["x", "y"]].to_numpy()
     km = KMeans(n_clusters=n, n_init=config.KMEANS_INIT, random_state=seed).fit(xy)
     S = []
