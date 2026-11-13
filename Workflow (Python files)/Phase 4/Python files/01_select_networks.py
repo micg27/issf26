@@ -1,51 +1,21 @@
-# 01_select_networks.py
 """
-Select sensor networks from the TRAINING scenarios (2021-2024 days) only.
-
-For every budget N in the pre-registered sweep, builds:
-    greedy    S_met, headline: greedy minimisation of the weighted kriging
-              RMSE (one nested order per noise level, since the objective
-              depends on noise)
-    qr        S_met, literature check: POD modes + QR pivoting
-    kmeans    S_spatial: spatial coverage by k-means on cell coordinates
-    existing  Melbourne only: the 8 EPA stations reporting PM2.5 in 2025,
-              each mapped to its nearest candidate cell
-Random networks are not stored: Phase 5 regenerates them from the seed
-with networks.random_networks.
-
-Also fits and saves the kriging variogram and sigma_city, which every
-strategy shares.
-
-Outputs (data/processed/phase4/<city>/):
-    <city>_networks.csv     strategy, noise, N, rank, cell_index, cell_id
-    <city>_kriging.json     variogram, sigma_city, noise levels
-Figures and training curves: outputs/phase4/<city>/
-
-Usage:
-    python 01_select_networks.py --all
-    python 01_select_networks.py --all --train-set all   # post-results extension:
-        # choose from every 2021-2024 day; writes *_trainall files alongside
-    python 01_select_networks.py --all --train-set all --k 200   # Phase 8:
-        # same, from the K = 200 simulations; writes *_trainall_K200 files
+select sensor networks from the train scenarios (2021-2024 days) only.
 """
 
 import argparse
 import json
-
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-
 import config
 import networks as N
 
 
 TRAINSET = "selected"
 SUFFIX = ""
-K_TAG = ""      # Phase 8: e.g. "_K200" reads/writes the K-sensitivity files
-
+K_TAG = ""    
 
 def parse_args():
     p = argparse.ArgumentParser(description="Select Phase 4 sensor networks.")
@@ -144,7 +114,6 @@ def select(city):
 
 
 def training_curves(city, maps, nets, K, vg, levels, modes):
-    """Training RMSE vs N at the headline noise (selection data, not a result)."""
     tr = maps["train"]
     label = f"f{config.MAIN_NOISE:g}"
     s2 = levels[label] ** 2
