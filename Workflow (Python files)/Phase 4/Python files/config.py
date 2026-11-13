@@ -1,10 +1,5 @@
-# config.py
 """
-Central configuration for Phase 4 (sensor network selection).
-
-Phase 3 settings (paths, cities, seed) are imported rather than copied, so
-the phases can't drift apart. The values below implement the design
-pre-registered in METHODS.md ("Phase 4-5 design").
+central configuration for Phase 4
 """
 
 import importlib.util
@@ -37,44 +32,39 @@ def output_dir(city):
     return d
 
 
-# ---------------------------------------------------------
-# SENSOR BUDGETS (pre-registered 2026-10-02)
-# ---------------------------------------------------------
-# Headline N = each city's current official PM2.5 network. Sweeps are
-# reported in full. Melbourne's goes 4x higher because its candidate area
-# is 4x larger, so every Singapore budget has an equal-density match.
+
+# sensor budgets 
 
 MAIN_N = {"singapore": 22, "melbourne": 8}
 N_MAX = {"singapore": 40, "melbourne": 160}
 N_MIN = 5
 
 
-# ---------------------------------------------------------
-# SENSOR NOISE (pre-registered 2026-10-02)
-# ---------------------------------------------------------
-# Noise SD = f x sigma_city, where sigma_city is the weighted mean spatial
-# SD of the training daily-mean maps. Headline f = 0.25. The absolute
-# 3 ug/m3 case (corrected low-cost sensors, Barkjohn et al. 2021) is run
-# as a stated limitation.
+
+# sensor noise
+# noise SD = f x sigma_city where sigma_city is the weighted mean spatial
+# SD of the training daily-mean maps. headline f = 0.25. the absolute
+# 3 ug/m3 case (corrected low-cost sensors, Barkjohn et al. 2021) is a
+# stated limitation.
 
 NOISE_FRACS = [0.0, 0.1, 0.25, 0.5, 1.0]
 MAIN_NOISE = 0.25
 ABS_NOISE = 3.0
 
 
-# ---------------------------------------------------------
-# STRATEGIES
-# ---------------------------------------------------------
-# QR pivoting uses r = max(1, N // QR_OVERSAMPLING) POD modes: twice as
+
+# strategies
+
+# QR pivoting uses r = max(1, N // QR_OVERSAMPLING) POD modes, twice as
 # many sensors as modes, Zhou et al. (2022)'s P = 2K setting. Manohar et
-# al. (2018) show that too many modes relative to sensors amplifies noise.
+# al. (2018) show that too many modes relative to sensors amplifies noise
 QR_OVERSAMPLE = 2
 
 KMEANS_INIT = 50
 N_RAND_NETS = 200
 
-# Kriging variogram: exponential model fitted to the weighted mean
+# kriging variogram: exponential model fitted to the weighted mean
 # empirical semivariogram of the training maps, using pairs up to this
-# fraction of the largest candidate-to-candidate distance.
+# fraction of the longest candidate-to-candidate distance.
 VG_MAX_FRAC = 0.5
 VG_BIN_M = 2000.0
