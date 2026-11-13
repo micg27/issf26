@@ -1,11 +1,7 @@
 # config.py
 """
-Central configuration for Phase 3 (pollution scenario generation).
+central configuration for phase 3
 
-Every other Phase 3 script imports from here. Change settings in ONE place.
-Phase 2 settings that Phase 3 must agree with (years, UTC offsets, the
-train/test split) are imported from Phase 2's config rather than copied,
-so the two phases can't silently drift apart.
 """
 
 import importlib.util
@@ -13,12 +9,9 @@ from pathlib import Path
 
 
 PROJ_ROOT = Path(__file__).resolve().parents[3]
-# config.py lives at <project_root>/Workflow/Phase 3/Python files/config.py
 
+# phase 2 config 
 
-# ---------------------------------------------------------
-# PHASE 2 CONFIG (imported, not duplicated)
-# ---------------------------------------------------------
 
 _p2path = PROJ_ROOT / "Workflow" / "Phase 2" / "Python files" / "config.py"
 _spec = importlib.util.spec_from_file_location("phase2_config", _p2path)
@@ -26,9 +19,9 @@ phase2 = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(phase2)
 
 
-# ---------------------------------------------------------
-# PATHS
-# ---------------------------------------------------------
+
+# paths
+
 
 RAW_DIR = PROJ_ROOT / "data" / "raw"
 GRID_DIR = RAW_DIR / "grids"
@@ -54,17 +47,9 @@ def output_dir(city, subfolder=None):
     return d
 
 
-# ---------------------------------------------------------
-# MODEL DOMAIN
-# ---------------------------------------------------------
-#
-# The transport model runs on a regular 2 km raster aligned exactly with
-# the Phase 1 candidate grid (same origin, same cell edges), extended by
-# DOMAIN_MARGIN_CELLS on every side. The margin matters: pollution emitted
-# just outside the candidate grid (e.g. Jurong Island, Melbourne's fringe)
-# still blows into it, and the open-boundary condition is less distorting
-# when it sits away from the cells we care about.
-# ---------------------------------------------------------
+
+# model domain
+
 
 CELL_SIZE = 2000
 MARGIN_CELLS = 5        # 10 km
@@ -73,13 +58,6 @@ CITIES = {
     "singapore": {
         "crs": "EPSG:3414",     # SVY21
         "grid_file": "Singapore_final.gpkg",
-        # The domain margin reaches Johor Bahru (Malaysia) and northern
-        # Batam (Indonesia) -- large populations upwind of Singapore that
-        # the Singapore-only raster would silently drop. WorldPop country
-        # rasters are masked to national territory, so they don't overlap.
-        # Land polygons for the land mask (where synthetic point sources may
-        # go). Outside Singapore (Johor, Batam) no polygon is used: a cell
-        # with any population counts as land there.
         "land_file": "boundaries/singapore/MasterPlan2025PlanningAreaBoundaryNoSea.geojson",
         "pop_files": [
             "sgp_pop_2023_CN_100m_R2025A_v1.tif",
@@ -90,8 +68,6 @@ CITIES = {
     "melbourne": {
         "crs": "EPSG:7855",     # GDA2020 / MGA zone 55
         "grid_file": "Melbourne_final.gpkg",
-        # Vicmap LGA polygons follow the coastline and cover all land in
-        # the Melbourne domain.
         "land_file": "boundaries/melbourne/lga_polygon/lga_polygon.shp",
         "pop_files": ["aus_pop_2023_CN_100m_R2025A_v1.tif"],
     },
@@ -108,10 +84,10 @@ def city_config(city):
     return cfg
 
 
-# ---------------------------------------------------------
+
 # PM2.5 OBSERVATIONS
 # ---------------------------------------------------------
-#
+
 # Singapore's NEA data is reported per REGION, not per station. The
 # coordinates below are the region "label locations" NEA itself publishes
 # in the data.gov.sg PM2.5 API (regionMetadata, fetched 2026-10-01 from
@@ -120,6 +96,7 @@ def city_config(city):
 # regional reading as a point reading there is an approximation, stated
 # as such in the methodology.
 # ---------------------------------------------------------
+
 
 SG_REGIONS = {
     "north":   (1.41803, 103.82),
