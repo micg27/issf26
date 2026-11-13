@@ -1,13 +1,4 @@
-# test_networks.py
-"""
-Checks for networks.py against direct (slow) calculations.
-
-Usage:
-    python test_networks.py
-"""
-
 import numpy as np
-
 import networks as N
 
 
@@ -31,7 +22,7 @@ def test_uniform_background_cancels():
     W = N.ok_weights(K, S, N.sensor_variance(vg, 0.0))
     assert np.allclose(W.sum(axis=1), 1.0)
     X = tr["X"][:5]
-    shifted = X + 7.3                                       # add a uniform background
+    shifted = X + 7.3                                     
     assert np.allclose(N.map_mse(X, S, W, 0.0), N.map_mse(shifted, S, W, 0.0))
 
 
@@ -52,7 +43,6 @@ def test_greedy_matches_direct_and_picks_the_best():
     C = K.shape[0]
     for n in (1, 2, 5, 12):
         assert abs(hist[n - 1] / direct_mse(tr, S[:n], K, vg, sigma2) - 1) < 1e-8
-    # At step 6, the greedy choice must be the true argmin over candidates.
     base = S[:5]
     errs = [direct_mse(tr, base + [c], K, vg, sigma2) if c not in base else np.inf
             for c in range(C)]
