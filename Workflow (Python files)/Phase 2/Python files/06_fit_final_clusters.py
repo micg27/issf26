@@ -1,3 +1,8 @@
+"""
+finalise weather types,
+standardizes wind and blh values (mean 0 sd 1), runs k-means clustering with k=3
+"""
+
 import json
 
 import numpy as np
