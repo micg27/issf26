@@ -1,4 +1,3 @@
-# config.py
 """
 central configuration for phase 3
 
