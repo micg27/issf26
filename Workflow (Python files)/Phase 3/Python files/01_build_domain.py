@@ -1,3 +1,8 @@
+"""
+builds the model's map
+2km grid lined up with phase 1 map + a margin, each cell gets a population (from WorldPop), candidate ID, and land/sea label
+"""
+
 import argparse
 import geopandas as gpd
 import numpy as np
@@ -17,7 +22,7 @@ def parse_cities(desc):
     return config.ALL_CITIES if args.all else [args.city]
 
 
-def load_candidates(city, cfg):
+def load_candidates(city, cfg):    # opens phase 1 candidate grid and checks it
     grid = gpd.read_file(config.GRID_DIR / cfg["grid_file"])
     assert grid.crs.to_string() == cfg["crs"], f"{city} grid CRS is {grid.crs}"
     assert grid["id"].is_unique
@@ -29,7 +34,7 @@ def load_candidates(city, cfg):
     )
     return grid
 
-def build_domain(city):
+def build_domain(city):   # makes the model grid
     cfg = config.city_config(city)
     grid = load_candidates(city, cfg)
     dx = config.CELL_SIZE
@@ -89,7 +94,7 @@ def build_domain(city):
     return ds
 
 
-def land_fraction(cfg, x, y, dx):
+def land_fraction(cfg, x, y, dx):    # for each cell find its percentage covered by land
     land = gpd.read_file(config.RAW_DIR / cfg["land_file"]).to_crs(cfg["crs"])
     half = dx / 2
     domainbox = box(x.min() - half, y.min() - half, x.max() + half, y.max() + half)
@@ -104,7 +109,7 @@ def land_fraction(cfg, x, y, dx):
     return frac
 
 
-def aggregate_population(cfg, x0, ytop, nx, ny, dx):
+def aggregate_population(cfg, x0, ytop, nx, ny, dx):   # adds up population from each country's raster into each cell
     pop = np.zeros((ny, nx))
     for name in cfg["pop_files"]:
         part = aggregate_one_raster(config.POP_DIR / name, cfg, x0, ytop, nx, ny, dx)
@@ -113,7 +118,7 @@ def aggregate_population(cfg, x0, ytop, nx, ny, dx):
     return pop
 
 
-def aggregate_one_raster(path, cfg, x0, ytop, nx, ny, dx):
+def aggregate_one_raster(path, cfg, x0, ytop, nx, ny, dx):    # prevents double counting of population
     toraster = Transformer.from_crs(cfg["crs"], "EPSG:4326", always_xy=True)
     tocity = Transformer.from_crs("EPSG:4326", cfg["crs"], always_xy=True)
     xs = [x0, x0 + nx * dx]
