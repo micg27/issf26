@@ -1,28 +1,3 @@
-# 02_network_geometry.py
-"""
-Phase 6 descriptive metrics (planned in the research plan; pre-stated in
-METHODS.md, 2026-10-07). For the full-training networks at the Phase 6 budgets:
-
-    nearest-neighbour distance   mean distance from each sensor to its
-                                 nearest other sensor (km), and its
-                                 coefficient of variation (SD / mean):
-                                 low CV = evenly spaced, high = clustered
-    distance to coast            mean distance from sensors to the
-                                 coastline (km)
-
-Networks: greedy (weather-informed, headline noise), k-means (evenly
-spread) and, for Melbourne, the existing EPA stations. The coastline is
-the boundary of the land polygons: Singapore planning areas (so the
-Johor Strait counts as coast) and the union of Victorian council areas.
-
-Descriptive only: no CIs.
-
-Output: data/processed/phase6/phase6_network_geometry.csv
-
-Usage:
-    python 02_network_geometry.py
-"""
-
 import importlib.util
 import sys
 from pathlib import Path
