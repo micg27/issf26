@@ -14,8 +14,8 @@ import networks as N
 
 
 TRAINSET = "selected"
-SUFFIX = ""
-K_TAG = ""    
+SUFFIX = ""   # nametag for file being run
+K_TAG = ""    # nametag for phase 8 runs, blank for headline K
 
 def parse_args():
     p = argparse.ArgumentParser(description="Select Phase 4 sensor networks.")
@@ -54,7 +54,7 @@ def existing_network(city, cells):
     return rows
 
 
-def select(city):
+def select(city):            # fits kriging on the training maps, then build every network for every N 
     print(f"=== {city}")
     maps = (N.load_maps(city, testset="all2025", trainset=TRAINSET, k_tag=K_TAG) if K_TAG
             else N.load_maps(city, trainset=TRAINSET))
@@ -113,7 +113,7 @@ def select(city):
     plot_variogram(city, vg)
 
 
-def training_curves(city, maps, nets, K, vg, levels, modes):
+def training_curves(city, maps, nets, K, vg, levels, modes):    # checks whether selection worked 
     tr = maps["train"]
     label = f"f{config.MAIN_NOISE:g}"
     s2 = levels[label] ** 2
@@ -145,7 +145,7 @@ def training_curves(city, maps, nets, K, vg, levels, modes):
     print("  training RMSE at headline N:", hn.round(4).to_dict())
 
 
-def plot_networks(city, cells, nets):
+def plot_networks(city, cells, nets):     
     n = config.MAIN_N[city]
     label = f"f{config.MAIN_NOISE:g}"
     panels = [("greedy", label), ("qr", "any"), ("kmeans", "any")]
