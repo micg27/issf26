@@ -1,47 +1,8 @@
-# 01_budget_sweep.py
-"""
-Phase 7 (pre-stated in METHODS.md, 2026-10-25): the budget sweep.
-
-Two questions from the research plan, over the pre-registered sweep
-(Singapore N = 5-40, Melbourne N = 5-160), headline noise f = 0.25:
-
-  Q2  diminishing returns (headline)
-      Fit RMSE(N) = a * N^(-b) + c to each strategy's test-RMSE curve.
-      Marginal gain g(N) = -RMSE'(N) / RMSE(N) from the fitted curve.
-      N* = smallest N with g(N) < 1% (also 0.5% and 2%).
-      Area-fair city comparison: Melbourne's threshold is applied per
-      area-equivalent sensor, i.e. step * g(N) < 1% with
-      step = area_MEL / area_SG ~ 3.98 (step = 1 for Singapore).
-  Q1  does the advantage hold across N?
-      OLS slope of improvement(N) = b0 + b1 * ln N. Prediction: b1 < 0.
-      Secondary: Melbourne over N = 5-40 (equal count) and 20-160 (equal
-      density with Singapore 5-40).
-      Descriptive: N values with CI above / below / straddling zero, and
-      sensors saved = k-means N matching greedy's RMSE (fitted curve) - N.
-
-CIs: the same 2,000 regime-stratified day-bootstrap draws as Phase 5;
-curves and slopes are refitted on every draw.
-
-Settings: "original" = full-training networks on all 2025 test days
-(primary); "L0" = emissions known exactly (secondary). Greedy is re-run
-on L0 training maps (nested, so one run covers every N); k-means networks
-are unchanged.
-
-Output: data/processed/phase7/phase7_budget_sweep.json
-        data/processed/phase7/<city>_<setting>_curves.csv
-        outputs/phase7/budget_sweep.png
-
-Usage:
-    python 01_budget_sweep.py
-    python 01_budget_sweep.py --k 200   # Phase 8: K = 200 files, *_K200 outputs
-"""
-
 import argparse
 import importlib.util
 import json
 import sys
 from pathlib import Path
-
 import dask
 import matplotlib
 matplotlib.use("Agg")
@@ -57,8 +18,7 @@ ROOT = Path(__file__).resolve().parents[3]
 P4 = ROOT / "Workflow" / "Phase 4" / "Python files"
 P5 = ROOT / "Workflow" / "Phase 5" / "Python files"
 sys.path.insert(0, str(P4))
-import networks as N  # noqa: E402
-
+import networks as N  
 _spec = importlib.util.spec_from_file_location("cfg4", P4 / "config.py")
 cfg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cfg)
@@ -69,25 +29,25 @@ _spec.loader.exec_module(ev5)
 OUTDATA = ROOT / "data" / "processed" / "phase7"
 OUT_FIG = ROOT / "outputs" / "phase7"
 N_BOOT = ev5.N_BOOT
-K_TAG = ""   # Phase 8: e.g. "_K200" = simulations and networks at K = 200
+K_TAG = ""  
 HEADLINE = ev5.HEADLINE
-AREA_KM2 = {"singapore": 655.3, "melbourne": 2611.2}       # Phase 1 candidate land area
+AREA_KM2 = {"singapore": 655.3, "melbourne": 2611.2}      
 STEP = {"singapore": 1.0, "melbourne": AREA_KM2["melbourne"] / AREA_KM2["singapore"]}
 THRESHOLDS = [0.005, 0.01, 0.02]
 MAIN_THRESH = 0.01
-N_GRID = np.arange(5, 20001, dtype=float)                  # where N* is searched
+N_GRID = np.arange(5, 20001, dtype=float)                 
 SLOPE_RNG = {"singapore": {"full": (5, 40)},
                 "melbourne": {"full": (5, 160), "equal_count_5-40": (5, 40),
                               "equal_density_20-160": (20, 160)}}
 SAVED_AT = {"singapore": [8, 22, 40], "melbourne": [8, 22, 32, 40, 88, 160]}
-GAIN_AT = {"singapore": [8, 22, 40], "melbourne": [8, 22, 88, 160]}   # incl. real network sizes
-BANDS = {"singapore": [(5, 10), (11, 20), (21, 40)],                  # Phase 5's descriptive bands
+GAIN_AT = {"singapore": [8, 22, 40], "melbourne": [8, 22, 88, 160]}  
+BANDS = {"singapore": [(5, 10), (11, 20), (21, 40)],                 
          "melbourne": [(5, 10), (11, 20), (21, 40), (41, 80), (81, 160)]}
 
 
-# ---------------------------------------------------------
-# DATA
-# ---------------------------------------------------------
+
+# data
+
 
 def setting_original(city):
     m = N.load_maps(city, testset="all2025", trainset="all", k_tag=K_TAG)
@@ -119,7 +79,6 @@ def setting_L0(city, cells):
 
 
 def per_map_mse(s, kmeans):
-    """(maps, N) per-map MSE for greedy and k-means at every N."""
     K = N.covariance(s["cells"], s["vg"])
     extra = N.sensor_variance(s["vg"], s["sd"]**2)
     X = s["test"]["X"]
@@ -131,9 +90,9 @@ def per_map_mse(s, kmeans):
     return np.array(nvals), out
 
 
-# ---------------------------------------------------------
-# STATISTICS
-# ---------------------------------------------------------
+
+# stats
+
 
 def power_law(n, a, b, c):
     return a * n**(-b) + c
@@ -150,7 +109,6 @@ def fit_curve(n, rmse, p0=None):
 
 
 def n_star(p, threshold, step):
-    """Smallest N with step * g(N) < threshold; inf if beyond N_GRID."""
     a, b, c = p
     g = a * b * N_GRID**(-b - 1) / power_law(N_GRID, a, b, c)
     hit = np.nonzero(step * g < threshold)[0]
@@ -182,12 +140,11 @@ def analyse(city, setting, s, kmeans):
     print(f"=== {city} / {setting}")
     n, mse = per_map_mse(s, kmeans)
     w, meta = s["test"]["w"], s["test"]["meta"]
-    # bootstrap multiplicities (draw, map), same draws as Phase 5
     idx = ev5.bootstrap_index(meta, N_BOOT, [cfg.SEED, 5, len(city)])
     B = np.stack([np.bincount(i, minlength=len(w)) for i in idx]).astype(float) * w
 
-    rm = {k: np.sqrt(w @ v) for k, v in mse.items()}                       # (N,)
-    rm_b = {k: np.sqrt((B @ v) / B.sum(1, keepdims=True)) for k, v in mse.items()}  # (draw, N)
+    rm = {k: np.sqrt(w @ v) for k, v in mse.items()}                       
+    rm_b = {k: np.sqrt((B @ v) / B.sum(1, keepdims=True)) for k, v in mse.items()}  
     imp, impb = 1 - rm["greedy"] / rm["kmeans"], 1 - rm_b["greedy"] / rm_b["kmeans"]
     ci = np.percentile(impb, [2.5, 97.5], axis=0)
 
@@ -252,7 +209,6 @@ def analyse(city, setting, s, kmeans):
 
 
 def compare(res):
-    """Melbourne minus Singapore N* on the area-fair basis, in sensors per 100 km2."""
     out = {}
     for setting in res["singapore"]:
         out[setting] = {}
