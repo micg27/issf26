@@ -1,11 +1,15 @@
+"""
+main pollution model
+solves A-D equation on the 2km grid
+"""
 import numpy as np
 import pandas as pd
 import xarray as xr
 from pyproj import Transformer
 from scipy.interpolate import RegularGridInterpolator
 
-HMIN = 50.0        
-CFL = 0.8
+HMIN = 50.0  # lowest blh allowed
+CFL = 0.8    # max pollution transfer allowed in one timestep
 
 
 # meteorology in domain
@@ -50,7 +54,8 @@ def met_to_domain(met, domain):
 
 
 
-def _mc_limited_slope(c, axis):
+def _mc_limited_slope(c, axis):    # computes a "limited" slope of concentration in each cell, it's kept small where the field has a big peak or a dip, so plumes do not have fake wiggles or negative values 
+
     dfwd = np.diff(c, axis=axis, append=np.take(c, [-1], axis=axis))
     dbwd = np.diff(c, axis=axis, prepend=np.take(c, [0], axis=axis))
     dcen = 0.5 * (dfwd + dbwd)
@@ -59,7 +64,7 @@ def _mc_limited_slope(c, axis):
     return np.where(same, np.sign(dcen) * lim, 0.0)
 
 
-def _advect_1d(c, velface, dt, dx, bg, axis):
+def _advect_1d(c, velface, dt, dx, bg, axis):      # advection: moves pollution with wind
     pad = [(0, 0)] * c.ndim
     pad[axis] = (2, 2)
     g = np.pad(c, pad, mode="constant")
@@ -94,14 +99,14 @@ def _advect_1d(c, velface, dt, dx, bg, axis):
     return c - dt / dx * (flux[tuple(hi)] - flux[tuple(lo)] - c * veldiv)
 
 
-def _diffuse(c, K, dt, dx, bg):
+def _diffuse(c, K, dt, dx, bg):         # diffusion: moves pollution along concentration gradient
     g = np.pad(c, [(0, 0)] * (c.ndim - 2) + [(1, 1), (1, 1)], mode="edge")
     lap = (g[..., 2:, 1:-1] + g[..., :-2, 1:-1] + g[..., 1:-1, 2:] + g[..., 1:-1, :-2]
            - 4 * c) / dx**2
     return c + dt * K * lap
 
 
-def _faces(field, axis):
+def _faces(field, axis):        # finds wind speed at borders between squares 
     inner = 0.5 * (np.take(field, range(field.shape[axis] - 1), axis=axis)
                    + np.take(field, range(1, field.shape[axis]), axis=axis))
     first = np.take(field, [0], axis=axis)
@@ -110,7 +115,7 @@ def _faces(field, axis):
 
 
 
-def run(fields, dx, emis, lam, K, bg, c0, samplecells=None, keephourly=False):
+def run(fields, dx, emis, lam, K, bg, c0, samplecells=None, keephourly=False):   # for each hour, choose a safe timestep, repeatedly move and spread pollution, adds emissions and subtracts losses
     uall, vall, hall = fields["u10"], fields["v10"], fields["blh"]
     nhours = uall.shape[0] - 1
     lam = np.asarray(lam, dtype=float)[:, None, None]
