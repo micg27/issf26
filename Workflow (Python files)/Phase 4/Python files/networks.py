@@ -55,7 +55,7 @@ def _load_extension(city, name, C, cellids, k_tag=""):
     return _pack(dd.reshape(De * Me, C).astype(float), m)
 
 
-def load_maps(city, testset="selected", trainset="selected", k_tag=""):
+def load_maps(city, testset="selected", trainset="selected", k_tag=""):    # loads daily average pollution maps and splits them into train/test sets
     if k_tag and (testset != "all2025" or trainset != "all"):
         raise ValueError("Phase 8 K runs exist only for all training and all 2025 days")
     ds = xr.open_dataset(config.P3_DIR / city / f"{city}_scenarios.nc")
@@ -133,7 +133,7 @@ def covariance(cells, vg):
 def sensor_variance(vg, sigma2):
     return vg["nugget"] + sigma2 + 1e-9 * vg["sill"]      
 
-def ok_weights(K, S, extravar):
+def ok_weights(K, S, extravar):    # ordinary kriging 
     S = list(S)
     n = len(S)
     A = np.zeros((n + 1, n + 1))
@@ -149,7 +149,7 @@ def map_mse(X, S, W, sigma2):
     return np.mean(resid**2, axis=1) + sigma2 * np.sum(W**2) / X.shape[1]
 
 
-def ensemble_rmse(X, w, S, K, vg, sigma2):
+def ensemble_rmse(X, w, S, K, vg, sigma2):        # rmse across all maps weighted by weather type
     W = ok_weights(K, S, sensor_variance(vg, sigma2))
     return float(np.sqrt(np.sum(w * map_mse(X, S, W, sigma2))))
 
