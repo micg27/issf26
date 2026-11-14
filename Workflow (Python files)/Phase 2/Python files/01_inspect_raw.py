@@ -1,3 +1,8 @@
+"""
+inspects raw files
+prints the variables, grid, time range and units
+"""
+
 import sys
 from pathlib import Path
 
