@@ -1,3 +1,7 @@
+"""
+phase 2 configuration
+"""
+
 from pathlib import Path
 
 START_YR = 2021
