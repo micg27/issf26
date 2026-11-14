@@ -88,7 +88,7 @@ def main():
                 return
 
         extra = ["--include-representative"] if code == "10" else []
-        run(script, city_args + extra)
+        run(script, cityargs + extra)
 
     print("\n" + "=" * 68)
     print("PHASE 2 COMPLETE")
