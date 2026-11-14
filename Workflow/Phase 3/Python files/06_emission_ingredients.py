@@ -1,5 +1,5 @@
 """
-simulate the pollution source predictability levels L0-L5
+simulate the pollution source predictability levels L0-L4
 31 runs per day: 20 versions of base × lognormal noise and a source at each of the 5 fixed sites in set A and 5 in set B. 
 any emission mix can later be made by adding these up (linear superposition)
 """
