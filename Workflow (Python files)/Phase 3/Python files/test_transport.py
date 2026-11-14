@@ -1,3 +1,8 @@
+"""
+check that the A-D equation code is correct
+tests hypothetical scenarios with varying background pollution and windspeeds/directions 
+"""
+
 import numpy as np
 import transport as T
 
