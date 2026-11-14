@@ -1,3 +1,7 @@
+"""
+extend test days to every single day, not just a sample
+runs the same as 04, except trains using 2021-2024, tests using 2025
+"""
 import argparse
 import importlib.util
 import json
@@ -43,7 +47,7 @@ def observed_daily_mean(city, dates):
     return daily.reindex(pd.DatetimeIndex(dates)).to_numpy()
 
 
-def extend(city, period, koverride=None):
+def extend(city, period, koverride=None):       # similar to generate function in file 04 of phase 3
     print(f"=== {city}")
     cfg = config.city_config(city)
     pdir = config.processed_dir(city)
