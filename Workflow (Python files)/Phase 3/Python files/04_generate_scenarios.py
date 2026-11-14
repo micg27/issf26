@@ -1,3 +1,9 @@
+"""
+build pollution maps for original design
+for each of the 63 days: 24 h spin-up on the previous day's weather, then 21 emission versions
+member 0 = base (alpha × population)
+members 1–20 = same total, but 70% as base × log-normal noise per cell and 30% as a random number (mean 5) of hotspots at random land cells with log-normal sizes
+"""
 import argparse
 import json
 import matplotlib
@@ -18,7 +24,8 @@ def parse_cities(desc):
     args = parser.parse_args()
     return config.ALL_CITIES if args.all else [args.city]
 
-def synthetic_emissions(base, land, rng):
+def synthetic_emissions(base, land, rng):   # makes one random emission map with the same expected total as the base: 70% as base × lognormal noise per cell, 30% as a random number (mean 5) of hotspots at random land cells with lognormal sizes.
+
     """One synthetic emission field (ug/s per cell) with base's expected total."""
     s = config.SYN_AREA_SIG
     area = (1 - config.SYN_PT_SHARE) * base * rng.lognormal(-s**2 / 2, s, base.shape)
@@ -32,7 +39,8 @@ def synthetic_emissions(base, land, rng):
     np.add.at(points, (rows[pick], cols[pick]), mags)
     return area + points, npts
 
-def generate(city):
+def generate(city):    # for every chosen day, builds the base plus 20 random emission maps, runs the model with 24 h warm-up on that day's real weather, adds the day's background, and saves all 21 hourly maps
+
     print(f"=== {city}")
     cfg = config.city_config(city)
     pdir = config.processed_dir(city)
@@ -133,7 +141,7 @@ def generate(city):
     print(f"  wrote {path}")
 
 
-def summarize(city, ds):
+def summarize(city, ds):             # prints how much spatial variation the maps contain, overall and per weather type
     """Spatial structure the sensor optimiser has to work with."""
     daily = ds["local_pm25"].mean("hour")                    # (day, member, cell)
     spatial_sd = daily.std("cell")
@@ -146,7 +154,8 @@ def summarize(city, ds):
                                            for k, v in zip(byregime["regime"].values, byregime.values)})
 
 
-def plot_examples(city, ds, domain):
+def plot_examples(city, ds, domain):    # draws the base and one random map for the typical day of each weather type
+
     """Daily-mean local PM2.5 for the representative day of each regime."""
     rep = np.nonzero(ds["selection"].values == "representative")[0]
     fig, axes = plt.subplots(2, len(rep), figsize=(4.2 * len(rep), 7.5), squeeze=False)
