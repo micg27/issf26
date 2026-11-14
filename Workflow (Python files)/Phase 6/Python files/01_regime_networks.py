@@ -1,3 +1,8 @@
+"""
+chooses a greedy network from each weather type's training days and an all-weather network
+on each type's 2025 days measures the transfer penalty (network for the wrong weather) and the fixed-network penalty (all-weather network)
+also how different these networks really are
+"""
 import importlib.util
 import json
 import sys
@@ -50,7 +55,7 @@ def regime_subset(split, regime):
     return split["X"][keep], np.full(len(m), 1.0 / len(m)), m
 
 
-def nearest_distance_ratio(cells, A, B, n, area):
+def nearest_distance_ratio(cells, A, B, n, area):   # how far apart 2 networks' sensors are on average trained in different weather regime
     xy = cells[["x", "y"]].to_numpy() / 1000
     a, b = xy[A], xy[B]
     d = np.hypot(a[:, None, 0] - b[None, :, 0], a[:, None, 1] - b[None, :, 1])
@@ -58,7 +63,7 @@ def nearest_distance_ratio(cells, A, B, n, area):
     return meand / np.sqrt(area / n)
 
 
-def boot_days(meta, rng):
+def boot_days(meta, rng): 
     days = meta["day"].to_numpy()
     rows = {d: np.nonzero(days == d)[0] for d in np.unique(days)}
     u = np.array(list(rows))
@@ -91,7 +96,7 @@ def analyse(city, setting, cells, train, test):
         mse = {(j, k): N.map_mse(testbyr[k][0], nets[j], W[j], sd**2)
                for j in nets for k in regimes}
 
-        def penalties(idx):
+        def penalties(idx):      
             tr, fx = 0.0, 0.0
             per = {}
             for k in regimes:
@@ -131,7 +136,7 @@ def analyse(city, setting, cells, train, test):
     return out, draws
 
 
-def compare(sg, mel, dsg, dmel):
+def compare(sg, mel, dsg, dmel):  # melbourne minus singapore penalties and overlap, with CIs
     out = {}
     for name, (ns, nm) in PAIRS.items():
         row = {}
