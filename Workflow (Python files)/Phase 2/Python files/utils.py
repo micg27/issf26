@@ -1,4 +1,3 @@
-# utils.py
 """
 Shared helpers for Phase 2.
 
