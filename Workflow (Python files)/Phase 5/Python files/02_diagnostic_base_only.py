@@ -1,43 +1,13 @@
-# 02_diagnostic_base_only.py
-"""
-DIAGNOSTIC (post-results, added 2026-10-04): is the weather signal being
-masked by the synthetic emission scenarios?
-
-20 of the 21 emission scenarios per day add ~30% of emissions as point
-sources at RANDOM land cells, re-drawn for every scenario, plus
-cell-level lognormal noise. No fixed network can anticipate a hotspot
-that moves every day, and even spacing is naturally robust to that. This
-script repeats the greedy-vs-k-means comparison using ONLY the base
-scenario (member 0: calibrated population emissions, the same every day,
-driven by each day's real weather). Day-to-day variation then comes from
-the weather alone.
-
-Uses the full-training extension (all 2021-2024 days) for selection and
-all 365 days of 2025 for testing, headline noise f = 0.25 (relative to
-the base-only training maps), the same kriging and bootstrap as
-01_evaluate.py.
-
-This is a diagnostic of the scenario design, not a replacement for the
-pre-registered result.
-
-Output: data/processed/phase5/phase5_diagnostic_base_only.json
-
-Usage:
-    python 02_diagnostic_base_only.py
-"""
-
 import importlib.util
 import json
 import sys
 from pathlib import Path
-
 import numpy as np
 
 PROJ_ROOT = Path(__file__).resolve().parents[3]
 P4 = PROJ_ROOT / "Workflow" / "Phase 4" / "Python files"
 sys.path.insert(0, str(P4))
-import networks as N  # noqa: E402
-
+import networks as N 
 _spec = importlib.util.spec_from_file_location("phase4_config", P4 / "config.py")
 cfg = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(cfg)
