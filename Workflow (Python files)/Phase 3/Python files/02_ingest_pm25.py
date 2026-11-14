@@ -1,3 +1,9 @@
+"""
+cleans pm2.5 figures
+converts everything to local time, for melbourne the pm2.5 column changes name mid record, this splices the change
+drops "impossible"/unplausible values
+"""
+
 import argparse
 import re
 import numpy as np
@@ -70,7 +76,7 @@ def read_station_sheet(ws):
     return df
 
 
-def load_melbourne():
+def load_melbourne():    # removes repeated new years' eve hour, checks for consistency in measurements
     frames = []
     for path in sorted(config.PM_RAW_DIR.glob(config.MEL_PM_GLOB)):
         year = int(re.match(r"(\d{4})_", path.name).group(1))
