@@ -1,3 +1,7 @@
+"""
+how many sensors are enough, and does the advantage hold at every N?
+finds N where one more sensor reduces RMSE by <1%
+"""
 import argparse
 import importlib.util
 import json
@@ -36,7 +40,7 @@ STEP = {"singapore": 1.0, "melbourne": AREA_KM2["melbourne"] / AREA_KM2["singapo
 THRESHOLDS = [0.005, 0.01, 0.02]
 MAIN_THRESH = 0.01
 N_GRID = np.arange(5, 20001, dtype=float)                 
-SLOPE_RNG = {"singapore": {"full": (5, 40)},
+SLOPE_RNG = {"singapore": {"full": (5, 40)},       # the ranges of N over which the slope is fitted (melbourne also at equal count 5–40 and equal density 20–160)
                 "melbourne": {"full": (5, 160), "equal_count_5-40": (5, 40),
                               "equal_density_20-160": (20, 160)}}
 SAVED_AT = {"singapore": [8, 22, 40], "melbourne": [8, 22, 32, 40, 88, 160]}
@@ -98,7 +102,7 @@ def power_law(n, a, b, c):
     return a * n**(-b) + c
 
 
-def fit_curve(n, rmse, p0=None):
+def fit_curve(n, rmse, p0=None):  # fits RMSE curve to an error-vs-N line.
     p0 = p0 if p0 is not None else (rmse[0] * n[0]**0.5, 0.5, 0.5 * rmse[-1])
     try:
         p, _ = curve_fit(power_law, n, rmse, p0=p0, bounds=([0, 0, 0], [np.inf, 5, np.inf]),
@@ -108,7 +112,8 @@ def fit_curve(n, rmse, p0=None):
     return p
 
 
-def n_star(p, threshold, step):
+def n_star(p, threshold, step):    # N* is the first N where one more sensor cuts error by less than 1%
+
     a, b, c = p
     g = a * b * N_GRID**(-b - 1) / power_law(N_GRID, a, b, c)
     hit = np.nonzero(step * g < threshold)[0]
@@ -120,17 +125,17 @@ def marginal_gain(p, n):
     return float(a * b * n**(-b - 1) / power_law(n, a, b, c))
 
 
-def kmeans_equivalent(p, target):
+def kmeans_equivalent(p, target):   # how many evenly spread sensors would match a given error from the fitted curve
     a, b, c = p
     return float((a / (target - c))**(1 / b)) if target > c else float("inf")
 
 
-def slope(n, imp, lo, hi):
+def slope(n, imp, lo, hi):  # fits improvement against ln N
     keep = (n >= lo) & (n <= hi)
     return float(np.polyfit(np.log(n[keep]), imp[keep], 1)[0])
 
 
-def pct(x):
+def pct(x):   # CIs 
     x = np.asarray(x, float)
     x = x[np.isfinite(x)]
     return np.percentile(x, [2.5, 97.5]).tolist() if len(x) else [None, None]
@@ -222,7 +227,7 @@ def compare(res):
     return out
 
 
-def plot(curves, scores):
+def plot(curves, scores):     # plots error vs N with fitted curves and improvement vs N with CI band and slope line
     fig, axes = plt.subplots(2, 2, figsize=(12, 8))
     for col, city in enumerate(cfg.ALL_CITIES):
         ax = axes[0, col]
