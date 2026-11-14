@@ -1,3 +1,12 @@
+"""
+checks: 
+A: synthetic totals equal to base total (0.997-1.000)
+B: share of map variation that is random is 37-39%
+D: how much wind varies across each domain
+M: is 24 hours of warmup sufficient
+X: are per-day CIs too low
+"""
+
 import importlib.util
 import json
 import sys
@@ -12,7 +21,7 @@ import xarray as xr
 dask.config.set(scheduler="synchronous")
 
 ROOT = Path(__file__).resolve().parents[3]
-P3, P4 = ROOT / "Workflow" / "Phase 3" / "Python files", ROOT / "Workflow" / "Phase 4" / "Python files"
+P3, P4 = ROOT / "Workflow" / "Phase 3" / "Python files", ROOT / "Workflow" / "Phase 4" / "Python files"  # phase 3 and 4 code 
 sys.path.insert(0, str(P4))
 import networks as N  
 
@@ -27,7 +36,7 @@ def load(name, path):
 cfg4 = load("cfg4", P4 / "config.py")
 sys.path.insert(0, str(P3))
 transport = load("transport", P3 / "transport.py")
-PH3 = cfg4.P3_DIR
+PH3 = cfg4.P3_DIR      # phase 3 data
 
 
 def check_A_B(city):
@@ -52,7 +61,7 @@ def check_D(city):
           f"({met.sizes['latitude']}x{met.sizes['longitude']} ERA5 points)")
 
 
-def check_M(city, days):
+def check_M(city, days):   # tries 72h warmup instead of 24h for comparison 
     pdir = PH3 / city
     dom = xr.open_dataset(pdir / f"{city}_domain.nc")
     cal = json.load(open(pdir / f"{city}_calibration.json"))
@@ -72,7 +81,7 @@ def check_M(city, days):
               f"pattern r = {np.corrcoef(res[24], res[72])[0, 1]:.3f}")
 
 
-def check_X(city):
+def check_X(city):    # resamples CIs with weeks instead of days to check whether day-level CIs are too narrow
     m = N.load_maps(city, "all2025", "all")
     te = m["test"]
     X, w, meta = te["X"], te["w"], te["meta"]
