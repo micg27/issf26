@@ -1,3 +1,8 @@
+""" 
+first weather data download, later replaced by
+Phase 2's 00_download_era5.py (this file is kept for record)
+"""
+
 import cdsapi
 
 c = cdsapi.Client()
