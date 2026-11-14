@@ -1,3 +1,8 @@
+"""
+simulate the pollution source predictability levels L0-L5
+31 runs per day: 20 versions of base × lognormal noise and a source at each of the 5 fixed sites in set A and 5 in set B. 
+any emission mix can later be made by adding these up (linear superposition)
+"""
 import argparse
 import importlib.util
 import json
@@ -9,7 +14,7 @@ import config
 import transport
 
 _spec = importlib.util.spec_from_file_location(
-    "gen", Path(__file__).with_name("04_generate_scenarios.py"))
+    "gen", Path(__file__).with_name("04_generate_scenarios.py"))   # loads 04 to use its settings
 gen = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(gen)
 
@@ -30,7 +35,7 @@ def parse_args():
     return (config.ALL_CITIES if a.all else [a.city]), a.period, a.k
 
 
-def fixed_sites(land):
+def fixed_sites(land):         
     rows, cols = np.nonzero(land)
     out = {}
     for k, name in enumerate(SITE_SETS):
@@ -40,7 +45,7 @@ def fixed_sites(land):
     return out
 
 
-def days_for(city, period, offseth):
+def days_for(city, period, offseth):       
     reg = pd.read_csv(config.P2_DIR / city / f"{city}_regimes_split.csv", parse_dates=["date"])
     weights = json.load(open(config.P2_DIR / city / f"{city}_regime_weights.json"))["weights"]
     days = reg[reg["date"].dt.year == 2025] if period == "test2025" else reg[reg["split"] == "train"]
@@ -52,7 +57,7 @@ def days_for(city, period, offseth):
     return days
 
 
-def run(city, period, koverride=None):
+def run(city, period, koverride=None):        # runs 31 tracers for each day: 20 noisy versions and 1 µg/s source at each of the 10 fixed sites
     print(f"=== {city} {period}")
     cfg = config.city_config(city)
     pdir = config.processed_dir(city)
