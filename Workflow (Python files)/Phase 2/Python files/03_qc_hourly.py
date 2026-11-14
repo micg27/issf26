@@ -1,3 +1,7 @@
+"""
+data quality control: checks for discontinuity/missing values, "impossible"/unplausible data (wind over 60ms-1)
+"""
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -10,7 +14,7 @@ import xarray as xr
 import config
 import utils
 
-PLAUSIBLE = {
+PLAUSIBLE = {               # sets plausible values
     "u10": (-60.0, 60.0),
     "v10": (-60.0, 60.0),
     "wind_speed": (0.0, 80.0),
@@ -19,7 +23,8 @@ PLAUSIBLE = {
     "tp": (0.0, 0.5),
 }
 
-def qc(city, year, records):
+def qc(city, year, records):          # checks for missing values and ranges
+                                      # draws histograms for wind v, bl height, and temperature, and a wind scatterplot
 
     utils.banner(f"QC: {city} {year}")
 
@@ -134,7 +139,7 @@ def qc(city, year, records):
     records.append(row)
 
 
-def main():
+def main():             # runs quality check for all city and years
 
     cities, years = utils.parse_cities(
         "QC the processed hourly meteorology.",
