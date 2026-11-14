@@ -1,3 +1,7 @@
+"""
+(runs before 08)
+splits days into training/testing days
+"""
 import pandas as pd
 
 from sklearn.model_selection import train_test_split
@@ -6,7 +10,7 @@ import config
 import utils
 
 
-def split(city):
+def split(city):    # labels all 2025 as test, 2021-2024 as train, check that all weather regimes have both train and test days
 
     utils.banner(f"TRAIN/TEST SPLIT: {city}  (mode={config.SPLITMODE})")
 
