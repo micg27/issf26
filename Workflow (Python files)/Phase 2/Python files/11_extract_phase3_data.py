@@ -1,3 +1,8 @@
+"""
+prepare weather inputs for pollution model 
+"""
+
+
 import pandas as pd
 import xarray as xr
 import config
@@ -5,7 +10,7 @@ import utils
 
 VARS_OUT = ["u10", "v10", "blh"]
 
-def extract(city):
+def extract(city):   # cuts wind and blh, labels with date, type and split, skips incomplete days
 
     utils.banner(f"{city}")
 
