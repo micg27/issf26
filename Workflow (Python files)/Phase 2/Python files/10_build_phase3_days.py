@@ -10,7 +10,7 @@ import utils
 
 def build(city, incl_rep):  # attaches train or test label and weights to days, and saves the list for phase 3
 
-    utils.banner(f{"{city}")
+    utils.banner(f"{city}")
 
     base = config.processed_dir(city)
 
