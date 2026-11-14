@@ -121,7 +121,11 @@ def main():
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--city", choices=config.ALL_CITIES)
     group.add_argument("--all", action="store_true")
-
+    parser.add_argument(
+        "--include-representative",
+        action="store_true",
+        help="Also include the most typical day of each weather type.",
+    )
     args = parser.parse_args()
 
     cities = config.ALL_CITIES if args.all else [args.city]
