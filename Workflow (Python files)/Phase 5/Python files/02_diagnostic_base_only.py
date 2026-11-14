@@ -1,3 +1,6 @@
+"""
+repeats the comparison using only the base emissions (no random hotspots), so day-to-day change comes from weather alone
+"""
 import importlib.util
 import json
 import sys
@@ -17,7 +20,7 @@ NVALS = {"singapore": [5, 8, 10, 15, 22, 30, 40],
             "melbourne": [5, 8, 10, 15, 22, 30, 40, 60, 88, 120, 160]}
 
 
-def base_member(split):
+def base_member(split):    # reweighs all maps keeping only base emissions
     keep = (split["meta"]["member"] == 0).to_numpy()
     meta = split["meta"][keep].reset_index(drop=True)
     n = meta.groupby("regime")["regime"].transform("size").to_numpy()
@@ -47,7 +50,7 @@ def run(city):
         W = N.ok_weights(K, S, N.sensor_variance(vg, sd**2))
         return N.map_mse(Xte, S, W, sd**2)
 
-    def imp(g, k, i=None):
+    def imp(g, k, i=None):   # improvement
         i = slice(None) if i is None else i
         return 1 - np.sqrt(np.sum(wte[i] * g[i]) / wte[i].sum()) / np.sqrt(np.sum(wte[i] * k[i]) / wte[i].sum())
 
