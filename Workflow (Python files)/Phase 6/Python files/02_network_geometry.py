@@ -1,3 +1,8 @@
+"""
+describes each network's shape
+finds mean distance to the nearest other sensor, how varied it is (low: even spacing, high: very clustered), 
+and mean distance to the coast, for greedy, k-means and melbourne's real stations
+"""
 import importlib.util
 import sys
 from pathlib import Path
@@ -25,7 +30,7 @@ def coastline(city):
     return land.geometry.make_valid().union_all().boundary
 
 
-def nn_stats(xy):
+def nn_stats(xy):    # for each network, finds average distance to nearest other sensor, and how varied this distance is
     d = np.hypot(xy[:, None, 0] - xy[None, :, 0], xy[:, None, 1] - xy[None, :, 1])
     np.fill_diagonal(d, np.inf)
     nn = d.min(axis=1) / 1000
