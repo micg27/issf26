@@ -1,19 +1,3 @@
-# 03_audit_checks.py
-"""
-Numerical checks behind Workflow/Assumptions audit.md (2026-10-04).
-
-  A  synthetic emission totals equal the base total on average
-  B  share of synthetic maps' spatial variance that is scenario-to-scenario
-     randomness (unpredictable from weather)
-  D  how much the interpolated ERA5 wind varies across each domain
-  M  whether 24 h of spin-up is enough (24 h vs 72 h on stagnant days)
-  X  whether day-level bootstrap CIs are too narrow, compared with a
-     weekly-block bootstrap that keeps multi-day weather events together
-
-Usage:
-    python 03_audit_checks.py
-"""
-
 import importlib.util
 import json
 import sys
@@ -24,15 +8,13 @@ import numpy as np
 import pandas as pd
 import xarray as xr
 
-# Open NetCDF files one at a time: the HDF5 library underneath isn't
-# thread-safe, and dask's default threaded reads can crash it when many
-# files are open in one process.
+
 dask.config.set(scheduler="synchronous")
 
 ROOT = Path(__file__).resolve().parents[3]
 P3, P4 = ROOT / "Workflow" / "Phase 3" / "Python files", ROOT / "Workflow" / "Phase 4" / "Python files"
 sys.path.insert(0, str(P4))
-import networks as N  # noqa: E402
+import networks as N  
 
 
 def load(name, path):
