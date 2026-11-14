@@ -1,3 +1,7 @@
+"""
+what happens when extreme values of spreading rate K are set?
+checks previous conclusions at K = 200 and K = 8000
+"""
 import json
 from pathlib import Path
 
@@ -61,7 +65,7 @@ def estimates(k):
     return e
 
 
-def verdicts(E):
+def verdicts(E):    # applies the pre-stated rule to each conclusion at each K, then decides whether it holds at both K = 200 and 8,000.
     out = {}
     for k, e in E.items():
         v = {}
@@ -104,7 +108,7 @@ def ci(x):
     return f"{pct(x[0])} ({100 * x[1]:+.1f}, {100 * x[2]:+.1f})"
 
 
-def table(E, V, H):
+def table(E, V, H): # builds a phase 8 summary table 
     ks = [200, 1000, 8000]
     yn = lambda b: "**holds**" if b else "**does not hold**"
     rows = ["| # | Measure | K = 200 | K = 1,000 (headline) | K = 8,000 | Verdict |",
