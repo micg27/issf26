@@ -1,3 +1,15 @@
+"""
+finding how much emission predictability matters
+builds six levels from the emission ingredients: 
+L0 known emissions 
+L1 area noise only
+L2 fixed sites 10%
+L3 fixed sites 30%
+L4 fixed sites + noise
+L5 random hotspots (original design)
+for each, re-chooses greedy on training maps and scores it against k-means on 2025 test maps
+"""
+
 import argparse
 import importlib.util
 import json
@@ -50,7 +62,7 @@ def load_ingredients(city, period):
     return ds["response"].values.astype(float), meta, ds.attrs["base_total_ug_s"], ds["cell_id"].values
 
 
-def magnitudes(meta, siteset):
+def magnitudes(meta, siteset):     # random log-normal sizes for fixed sites per day and scenario
     """(day, member, J) magnitudes per unit p: mean total / J, lognormal sigma 1."""
     out = np.empty((len(meta), N_AREA, J))
     for d, date in enumerate(meta["date"]):
@@ -59,7 +71,7 @@ def magnitudes(meta, siteset):
     return out
 
 
-def assemble(resp, meta, total, level, siteset):
+def assemble(resp, meta, total, level, siteset):   # builds 1 level's maps via linear superposition
     """Maps (day*member, cell) and their metadata for one level."""
     mode, p, area = LEVELS[level]
     base = resp[:, 0]                                        
@@ -93,7 +105,7 @@ def weights(m):
     return w / w.sum()
 
 
-def boot_index(m, seed):
+def boot_index(m, seed):   # 2000 resamples of test days within weather type 
     rng = np.random.default_rng(seed)
     days, reg = m["day"].to_numpy(), m["regime"].to_numpy()
     byreg = {r: np.unique(days[reg == r]) for r in np.unique(reg)}
@@ -102,7 +114,8 @@ def boot_index(m, seed):
             for _ in range(N_BOOT)]
 
 
-def evaluate_level(city, cells, kmeansnets, Xtr, mtr, Xte, mte):
+def evaluate_level(city, cells, kmeansnets, Xtr, mtr, Xte, mte):  # for each level, fits kriging, re-chooses greedy from that level's training maps, 
+                                                                  # scores greedy vs k-means on 2025 at every N, with CIs
     wtr, wte = weights(mtr), weights(mte)
     Sigma = N.second_moment(Xtr, wtr)
     vg = N.fit_variogram(cells, Sigma)
@@ -129,7 +142,7 @@ def evaluate_level(city, cells, kmeansnets, Xtr, mtr, Xte, mte):
             "train_spatial_sd": N.spatial_sd(Xtr, wtr)}, draws
 
 
-def run_city(city):
+def run_city(city):   # runs all predictability levels for one city
     print(f"=== {city}")
     nets = pd.read_csv(cfg.processed_dir(city) / f"{city}_networks_trainall.csv")
     km = nets[nets["strategy"] == "kmeans"]
@@ -156,7 +169,7 @@ def run_city(city):
     return out, draws
 
 
-def compare(sg, mel, dsg, dmel):
+def compare(sg, mel, dsg, dmel):  # melbourne minus singapore improvement for every level and comparison pair 
     out = {}
     for key in sg:
         out[key] = {}
@@ -167,7 +180,7 @@ def compare(sg, mel, dsg, dmel):
     return out
 
 
-def plot(results):
+def plot(results):   # plots improvement at each level for both cities 
     order = ["L0", "L1", "L2_setA", "L2_setB", "L3_setA", "L3_setB", "L4_setA", "L4_setB", "L5"]
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.3), sharey=True)
     for ax, (ns, nm, title) in zip(axes, [(22, 8, "own network size (SG 22, MEL 8)"),
