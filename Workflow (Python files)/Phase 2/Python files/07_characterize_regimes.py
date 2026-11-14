@@ -1,3 +1,8 @@
+"""
+determines what each weather regime means. 
+averages wind, blh, frequency, and a plot of how wind turns throughout the day per regime type
+"""
+
 import json
 
 import matplotlib
@@ -20,7 +25,7 @@ BLOCK_LABS = {
 }
 
 
-def characterize(city):
+def characterize(city): # for each regime, determines average wind speed, steadiness, mixing height and frequency 
 
     utils.banner(f"REGIME CHARACTERIZATION: {city}")
 
