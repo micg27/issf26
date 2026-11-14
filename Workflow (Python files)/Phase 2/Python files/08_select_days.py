@@ -1,3 +1,7 @@
+"""
+chooses days to simulate in the original design. 
+"""
+
 import json
 
 import numpy as np
@@ -7,7 +11,7 @@ import config
 import utils
 
 
-def select(city):
+def select(city):  # finds days closest to center of cluster (most typical/average features), randomly picks 14 training and 6 test days per type
 
     utils.banner(f"DAY SELECTION: {city}")
 
