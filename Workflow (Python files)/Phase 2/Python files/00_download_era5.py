@@ -1,3 +1,7 @@
+"""
+final download of all ERA5 weather data
+"""
+
 import zipfile
 from tempfile import TemporaryDirectory
 
