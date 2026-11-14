@@ -1,37 +1,3 @@
-# 01_regime_networks.py
-"""
-Phase 6, Analysis 1 (pre-stated in METHODS.md, 2026-10-07): regime-specific
-networks.
-
-Tests the explanation left open by Phase 5: Singapore's steady monsoon
-flow lets one fixed network serve every day, while Melbourne's changeable
-weather does not.
-
-For each city, emission setting and budget N:
-  * a greedy network is chosen from each regime's 2021-2024 training maps
-    only, plus the all-weather network from all training maps;
-  * every network uses the same kriging covariance (fitted on all training
-    maps of that setting) and the same noise (f = 0.25 x the city's overall
-    training spatial SD), so only the training weather differs;
-  * on each regime's 2025 test days, each network is scored:
-      transfer penalty       RMSE(net j on regime k) / RMSE(net k on k) - 1, j != k
-      fixed-network penalty  RMSE(all-weather net on k) / RMSE(net k on k) - 1
-    averaged over regimes with weights w_k;
-  * overlap between regime networks: Jaccard index of their cells, and the
-    mean nearest-sensor distance between them / sqrt(area / N).
-CIs: regime-stratified day bootstrap (2,000 draws), as in Phase 5.
-
-Emission settings: "original" = the Phase 3 scenario design (the
-full-training networks); "L0" = known emissions (base ingredient only),
-secondary, because the original design's random hotspots mask weather
-patterns.
-
-Output: data/processed/phase6/phase6_regime_networks.json
-
-Usage:
-    python 01_regime_networks.py
-"""
-
 import importlib.util
 import json
 import sys
@@ -48,7 +14,7 @@ dask.config.set(scheduler="synchronous")
 ROOT = Path(__file__).resolve().parents[3]
 P4 = ROOT / "Workflow" / "Phase 4" / "Python files"
 sys.path.insert(0, str(P4))
-import networks as N  # noqa: E402
+import networks as N 
 
 _spec = importlib.util.spec_from_file_location("cfg4", P4 / "config.py")
 cfg = importlib.util.module_from_spec(_spec)
@@ -122,7 +88,6 @@ def analyse(city, setting, cells, train, test):
     for n in NVALS[city]:
         nets = {k: v[:n] for k, v in orders.items()}
         W = {k: N.ok_weights(K, S, N.sensor_variance(vg, sd**2)) for k, S in nets.items()}
-        # per-map MSE of every network on every regime's test maps
         mse = {(j, k): N.map_mse(testbyr[k][0], nets[j], W[j], sd**2)
                for j in nets for k in regimes}
 
