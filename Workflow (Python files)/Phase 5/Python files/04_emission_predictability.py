@@ -1,35 +1,3 @@
-# 04_emission_predictability.py
-"""
-Emission-predictability experiment (pre-stated in METHODS.md, 2026-10-04).
-
-Assembles the predictability ladder L0-L5 from the ingredient runs (Phase 3
-06_emission_ingredients.py) by linear superposition, then for each level
-(and each fixed-site set for L2-L4):
-    * chooses greedy networks from the 2021-2024 training maps, with noise
-      f = 0.25 relative to that level's training maps;
-    * scores greedy against the unchanged k-means networks on the 2025 maps
-      of the same level (same kriging, stratified paired day-bootstrap);
-    * reports improvement at each budget, plus Melbourne-minus-Singapore
-      differences at own size, equal count and equal density.
-
-Levels (20 scenarios per day; point magnitudes lognormal sigma 1 with mean
-p x total / J, drawn per site, day and scenario, the same draws scaled
-by p at every level):
-    L0  base only (emissions known exactly)
-    L1  area noise only (p = 0, sigma_area = 0.5)
-    L2  fixed sites, p = 0.1, no area noise
-    L3  fixed sites, p = 0.3, no area noise
-    L4  fixed sites, p = 0.3, sigma_area = 0.5
-    L5  random sites re-drawn every scenario (existing Phase 3 design)
-
-Output: data/processed/phase5/phase5_emission_predictability.json
-        outputs/phase5/emission_predictability.png
-
-Usage:
-    python 04_emission_predictability.py
-    python 04_emission_predictability.py --k 200   # Phase 8: K = 200 files, *_K200 outputs
-"""
-
 import argparse
 import importlib.util
 import json
@@ -47,10 +15,10 @@ import xarray as xr
 dask.config.set(scheduler="synchronous")
 
 ROOT = Path(__file__).resolve().parents[3]
-K_TAG = ""   # Phase 8: e.g. "_K200" = ingredients, scenarios and outputs at K = 200
+K_TAG = ""  
 P4 = ROOT / "Workflow" / "Phase 4" / "Python files"
 sys.path.insert(0, str(P4))
-import networks as N  # noqa: E402
+import networks as N  
 
 _spec = importlib.util.spec_from_file_location("cfg4", P4 / "config.py")
 cfg = importlib.util.module_from_spec(_spec)
@@ -61,7 +29,7 @@ J = 5
 N_AREA = 20
 NVALS = {"singapore": [5, 8, 10, 15, 22, 30, 40],
             "melbourne": [5, 8, 10, 15, 22, 30, 32, 40, 60, 88, 120, 160]}
-LEVELS = {  # name: (point mode, p, use area noise)
+LEVELS = {  
     "L0": (None, 0.0, False),
     "L1": (None, 0.0, True),
     "L2": ("fixed", 0.1, False),
@@ -94,14 +62,14 @@ def magnitudes(meta, siteset):
 def assemble(resp, meta, total, level, siteset):
     """Maps (day*member, cell) and their metadata for one level."""
     mode, p, area = LEVELS[level]
-    base = resp[:, 0]                                         # (D, C)
-    aream = resp[:, 1:1 + N_AREA]                            # (D, M, C)
+    base = resp[:, 0]                                        
+    aream = resp[:, 1:1 + N_AREA]                            
     local = aream if area else np.repeat(base[:, None], N_AREA, axis=1)
     X = (1 - p) * local
     if mode == "fixed":
         k0 = 1 + N_AREA + J * siteset
-        R = resp[:, k0:k0 + J]                                # (D, J, C) per 1 ug/s
-        a = p * total / J * magnitudes(meta, siteset)        # (D, M, J)
+        R = resp[:, k0:k0 + J]                                
+        a = p * total / J * magnitudes(meta, siteset)        
         X = X + np.einsum("dmj,djc->dmc", a, R)
     D, M, C = X.shape
     m = pd.DataFrame({"day": np.repeat(np.arange(D), M), "member": np.tile(np.arange(M), D),
