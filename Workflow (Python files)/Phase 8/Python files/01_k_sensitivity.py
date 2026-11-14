@@ -1,19 +1,3 @@
-# 01_k_sensitivity.py
-"""
-Phase 8 (pre-stated in METHODS.md, 2026-10-25): sensitivity to the
-spreading rate K. Reads the Phase 5 and Phase 7 results at K = 200, 1,000
-(headline) and 8,000 m2/s and checks conclusions C1-C7 against the
-pre-stated rules: a conclusion holds if, at both K = 200 and K = 8,000,
-it meets its rule (same sign and significance as at the headline unless
-the METHODS.md table says otherwise).
-
-Output: data/processed/phase8/phase8_k_sensitivity.json
-        data/processed/phase8/phase8_k_sensitivity_table.md
-
-Usage:
-    python 01_k_sensitivity.py
-"""
-
 import json
 from pathlib import Path
 
@@ -31,7 +15,7 @@ CRIT_PAIRS = ["equal_count_N22", "equal_count_N40", "equal_density_SG8_MEL32",
 
 
 def sig(ci):
-    """+1 if the 95% CI is above zero, -1 if below, 0 if it includes zero."""
+    """+1 if the 95% confidence interval is above zero, -1 if below, 0 if it includes zero."""
     return 1 if ci[0] > 0 else (-1 if ci[1] < 0 else 0)
 
 
@@ -49,11 +33,11 @@ def estimates(k):
     for c in MAIN_N:
         r = ev[c]
         e[f"C1_{c}"] = [r["improvement_greedy_vs_kmeans"], *r["ci95"]]
-    # C2: L0-L4 at real network size, per city (9 level x set cells incl. L0 and L1 -> 8 cells)
+    # C2: L0-L4 at real network size, per city
     for c, n in MAIN_N.items():
         cells = {lv: pred[c][lv]["improvement"][str(n)] for lv in L0_L4}
         e[f"C2_{c}"] = cells
-    # C3: Melbourne-benefits-more criterion at L2-L4
+    # C3: scenario where Melbourne benefits more at L2-L4
     d = pred["city_difference_mel_minus_sg"]
     e["C3"] = {lv: {p: d[lv][p] for p in CRIT_PAIRS} for lv in REALISTIC}
     # C4: Singapore minus Melbourne at own network size, L0-L4
@@ -62,15 +46,15 @@ def estimates(k):
     # C5: L5 at real network size
     for c, n in MAIN_N.items():
         e[f"C5_{c}"] = pred[c]["L5"]["improvement"][str(n)]
-    # C6: N* density (original design, 1% rule, area-fair, greedy)
+    # C6: N* density 
     cc = sw["city_comparison_area_fair"]["original"]["greedy"]
     e["C6"] = {"singapore": cc["density_singapore"], "melbourne": cc["density_melbourne"],
                "ci_singapore": cc["density_ci_singapore"], "ci_melbourne": cc["density_ci_melbourne"]}
-    # C7: slope of improvement on ln N (original design, full sweep)
+    # C7: slope of improvement on ln N 
     for c in MAIN_N:
         s = sw[c]["original"]["slopes"]["full"]
         e[f"C7_{c}"] = [s["beta1"], *s["ci95"], s["per_doubling_pp"]]
-    # descriptive: variogram range (km) of the original-design training maps and L0
+    # variogram range in km of the original design training maps and L0
     e["variogram_range_km"] = {c: {"original": sw[c]["original"]["variogram_range_km"],
                                    "L0": sw[c]["L0"]["variogram_range_km"]} for c in MAIN_N}
     e["test_rmse_original"] = {c: ev[c]["test_rmse"] for c in MAIN_N}
@@ -78,7 +62,6 @@ def estimates(k):
 
 
 def verdicts(E):
-    """Rule checks (METHODS.md "Phase 8 design"), per K value."""
     out = {}
     for k, e in E.items():
         v = {}
