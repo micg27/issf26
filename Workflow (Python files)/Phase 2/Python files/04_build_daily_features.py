@@ -1,3 +1,7 @@
+"""
+converts everything to local time, averages wind into 4 6-hour blocks per day 
+with daily mean boundary layer height
+"""
 import pandas as pd
 import xarray as xr
 
@@ -5,7 +9,7 @@ import config
 import utils
 
 
-def build(city):
+def build(city):           # averages weather over the city, converts to local time, drops incomplete days, prepares wind and blh values
 
     utils.banner(f"DAILY FEATURES: {city}")
 
@@ -103,7 +107,7 @@ def build(city):
 
     print(f"\n  Saved {out}")
 
-def main():
+def main():         
 
     cities = utils.parse_cities("Build daily clustering features.")
 
