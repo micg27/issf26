@@ -1,3 +1,7 @@
+"""
+sorts raw data into clean hourly files
+"""
+
 import numpy as np
 import xarray as xr
 
@@ -5,7 +9,8 @@ import config
 import utils
 
 
-def process(city, year):
+def process(city, year): # for one city and year (e.g. Singapore 2022): collects the 5 required variables, merges them, keeps only that year, 
+                         # discard duplicate hours, adds wind speed, wind direction and temperature in °C, checks the hour count (8,760 or 8,784), and saves
 
     utils.banner(f"PREPROCESS: {city} {year}")
 
