@@ -1,33 +1,3 @@
-# 01_evaluate.py
-"""
-Phase 5: score every Phase 4 network on the held-out 2025 test maps.
-
-Networks were chosen from 2021-2024 training maps only, so this is an
-out-of-sample test. Every network is scored with the same ordinary-kriging
-reconstruction and exact expected error under sensor noise (networks.py).
-
-Headline (pre-registered in METHODS.md, "Phase 4-5 design"):
-    relative improvement = (RMSE_kmeans - RMSE_greedy) / RMSE_kmeans
-at each city's headline N and headline noise (f = 0.25), with a 95% CI
-from a stratified bootstrap over test days: days are resampled with
-replacement within each regime, so every regime keeps its weight w_k.
-Greedy and k-means are scored on the same resampled days (paired).
-
-The city comparison is reported three ways, as pre-registered:
-    own network size   Singapore N = 22 vs Melbourne N = 8
-    equal count        both cities at the same N
-    equal density      Melbourne N ~= 4 x Singapore N (candidate area ratio)
-
-Outputs:
-    data/processed/phase5/<city>/<city>_test_scores.csv  every strategy x noise x N
-    data/processed/phase5/<city>/<city>_improvement.csv  greedy vs k-means vs N, with CIs
-    data/processed/phase5/phase5_results.json            headline numbers
-    outputs/phase5/...                                   figures
-
-Usage:
-    python 01_evaluate.py
-"""
-
 import argparse
 import importlib.util
 import json
@@ -43,7 +13,7 @@ import pandas as pd
 PROJ_ROOT = Path(__file__).resolve().parents[3]
 P4 = PROJ_ROOT / "Workflow" / "Phase 4" / "Python files"
 sys.path.insert(0, str(P4))
-import networks as N  # noqa: E402
+import networks as N 
 
 _spec = importlib.util.spec_from_file_location("phase4_config", P4 / "config.py")
 cfg = importlib.util.module_from_spec(_spec)
@@ -51,13 +21,13 @@ _spec.loader.exec_module(cfg)
 
 OUTDATA = PROJ_ROOT / "data" / "processed" / "phase5"
 OUT_FIG = PROJ_ROOT / "outputs" / "phase5"
-TESTSET = "selected"        # set from --test-set; "all2025" = post-results extension
-TRAINSET = "selected"       # set from --train-set; "all" = networks chosen from every 2021-24 day
+TESTSET = "selected"        
+TRAINSET = "selected"       
 SUFFIX = ""
 NET_SUF = ""
-K_TAG = ""                   # Phase 8: e.g. "_K200" = simulations and networks at K = 200
+K_TAG = ""                   
 N_BOOT = 2000
-RAND_STEP = 5            # random baseline every 5th N (plus headline N)
+RAND_STEP = 5           
 HEADLINE = f"f{cfg.MAIN_NOISE:g}"
 
 
@@ -86,8 +56,6 @@ def bootstrap_index(meta, nboot, seed):
 def weighted_rmse(mse, w, idx=None):
     if idx is None:
         return float(np.sqrt(np.sum(w * mse)))
-    # Resampled maps keep their regime weight; renormalise in case a
-    # resample changes how many maps each regime has (it doesn't here).
     ww = w[idx]
     return float(np.sqrt(np.sum(ww * mse[idx]) / ww.sum()))
 
@@ -123,8 +91,6 @@ def evaluate(city):
                 msestore[(strat, label, n)] = mse
                 rows.append((strat, label, n, weighted_rmse(mse, w)))
         print(f"  scored {label}")
-
-    # Random baseline: mean over networks, headline noise, every RANDOM_N_STEP
     sd = noise[HEADLINE]
     nvals = sorted(set(range(cfg.N_MIN, cfg.N_MAX[city] + 1, RAND_STEP))
                     | {cfg.MAIN_N[city]})
@@ -137,7 +103,6 @@ def evaluate(city):
     scores = pd.DataFrame(rows, columns=["strategy", "noise", "N", "test_rmse"])
     scores.to_csv(datadir / f"{city}_test_scores{SUFFIX}.csv", index=False)
 
-    # Greedy vs k-means: improvement and paired bootstrap CI, every N, every noise.
     boots = bootstrap_index(meta, N_BOOT, [cfg.SEED, 5, len(city)])
     improws = []
     for label in noise:
@@ -149,7 +114,6 @@ def evaluate(city):
     imp = pd.DataFrame(improws, columns=["noise", "N", "improvement", "ci_low", "ci_high", "boot_sd"])
     imp.to_csv(datadir / f"{city}_improvement{SUFFIX}.csv", index=False)
 
-    # Per-regime improvement at the headline budget and noise.
     n0 = cfg.MAIN_N[city]
     g0, k0 = msestore[("greedy", HEADLINE, n0)], msestore[("kmeans", HEADLINE, n0)]
     byregime = {}
@@ -157,7 +121,6 @@ def evaluate(city):
         i = sub.index.to_numpy()
         byregime[r] = 1 - np.sqrt(np.mean(g0[i])) / np.sqrt(np.mean(k0[i]))
 
-    # Equivalent sensors: smallest k-means N matching greedy's error at n0.
     sc = scores[scores["noise"] == HEADLINE]
     target = sc[(sc["strategy"] == "greedy") & (sc["noise"] == HEADLINE) & (sc["N"] == n0)]["test_rmse"].item()
     km = sc[sc["strategy"] == "kmeans"].sort_values("N")
@@ -204,13 +167,6 @@ BANDS = {"singapore": [(5, 10), (11, 20), (21, 40)],
 
 
 def band_means(city, res):
-    """DESCRIPTIVE, not pre-registered: mean improvement over bands of N.
-
-    Single-N values are jagged because k-means lands on better or worse
-    layouts from one N to the next. Averaging over a band of budgets
-    smooths that out. The CI comes from the same paired day-bootstrap, by
-    averaging each draw over the band.
-    """
     out = {}
     for lo, hi in BANDS[city]:
         draws = np.mean([improvement_draws(res, HEADLINE, n) for n in range(lo, hi + 1)], axis=0)
