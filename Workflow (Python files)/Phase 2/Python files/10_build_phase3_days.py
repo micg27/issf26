@@ -1,10 +1,14 @@
+"""
+makes a list of days to use in Phase 3
+"""
+
 import argparse
 import json
 import pandas as pd
 import config
 import utils
 
-def build(city, incl_rep):
+def build(city, incl_rep):  # attaches train or test label and weights to days, and saves the list for phase 3
 
     utils.banner(f{"{city}")
 
