@@ -1,3 +1,8 @@
+"""
+decides how many weather regimes to use
+runs k-means clustering for a range of k (2 to 8) and reports four scores (elbow, silhouette, Calinski–Harabasz, Davies–Bouldin),
+plus how many days fall in each cluster
+"""
 import matplotlib
 
 matplotlib.use("Agg")
@@ -17,7 +22,8 @@ import config
 import utils
 
 
-def sweep(city):
+def sweep(city):              # runs k-means clustering for k=2 to 8, records 4 best scores for each k and size 
+                              # of smallest and largest cluster, then plots them
 
     utils.banner(f"CLUSTER SWEEP: {city}")
 
