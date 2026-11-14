@@ -10,8 +10,8 @@ from shapely.ops import unary_union
 
 ROOT = Path(__file__).resolve().parents[3]
 BOUNDS = ROOT / "data" / "raw" / "boundaries" / "melbourne"
-OUT = BOUNDS / "UGB_polygon.gpkg"
-CRS = "EPSG:7855"
+OUT = BOUNDS / "UGB_polygon.gpkg" # output file
+CRS = "EPSG:7855"                 # map projection in m
 
 METRO_LGA = [
     "BANYULE", "BAYSIDE", "BOROONDARA", "BRIMBANK", "CARDINIA", "CASEY",
@@ -24,8 +24,8 @@ METRO_LGA = [
 
 OPEN_M = 10
 MIN_AREA = 100_000
-EDGE_TOL = 5
-REVIEW_THRESH = 0.5
+EDGE_TOL = 5        # an edge must be within 5m of a boundary line to count as being on it
+REVIEW_THRESH = 0.5 # a piece whose edge is mostly NOT on a known boundary is flagged for a human to check
 
 
 def load(name):
@@ -44,7 +44,7 @@ def fill_small_holes(poly):
     return Polygon(poly.exterior, holes)
 
 
-def main():
+def main():           # merges all councils, subtracts area outside UGB, removes slivers and flags certain pieces
     lga = load("lga_polygon")
     uga = load("plan_uga")
     print("PLAN_UGA zone codes:", uga["zone_code"].value_counts().to_dict())
@@ -96,7 +96,7 @@ def main():
     if len(review):
         print(review.drop(columns="geometry").sort_values("area_km2", ascending=False)
               .to_string(index=False))
-    print(f"wrote {OUT}")
+    print(f"wrote {OUT}")                                                            
 
 
 if __name__ == "__main__":
