@@ -87,7 +87,8 @@ def main():
                 print("then re-run:  python run_phase2.py --from 06")
                 return
 
-        run(script, cityargs)
+        extra = ["--include-representative"] if code == "10" else []
+        run(script, city_args + extra)
 
     print("\n" + "=" * 68)
     print("PHASE 2 COMPLETE")
