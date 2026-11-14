@@ -15,7 +15,7 @@ import config
 import utils
 
 
-def fit(city):
+def fit(city): # runs k-means, labels regimes SIN1 2 and 3, MEL1 2 and 3, where 1 is the most common weather type
 
     utils.banner(f"FINAL CLUSTERING: {city}")
 
