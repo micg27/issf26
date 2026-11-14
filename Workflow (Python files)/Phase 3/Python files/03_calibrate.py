@@ -1,3 +1,6 @@
+"""
+fine-tune constants to match real world values
+"""
 import argparse
 import json
 import matplotlib
@@ -10,10 +13,10 @@ from scipy.optimize import nnls
 import config
 import transport
 
-K_DIAG_GRID = [100.0, 300.0, 1000.0, 3000.0, 10000.0, 30000.0]   # m2 s-1 for k-grid only
-LAM_GRID_HRS = [np.inf, 24.0, 12.0, 6.0, 3.0, 1.5]            # e-folding time, h
-SPINUP_HRS = 24
-SECS_PER_YR = 365.25 * 86400
+K_DIAG_GRID = [100.0, 300.0, 1000.0, 3000.0, 10000.0, 30000.0]   # tried spreading rates K
+LAM_GRID_HRS = [np.inf, 24.0, 12.0, 6.0, 3.0, 1.5]               # tried loss rates lambda
+SPINUP_HRS = 24                                                  # 24-hour simulation from the previous day, so the day does not always start from completely clean air
+SECS_PER_YR = 365.25 * 86400                                     # converts emission rate into kg person-1 year-1
 
 
 def parse_args(desc):
@@ -33,7 +36,7 @@ def lam_per_second(hours):
     return 0.0 if np.isinf(hours) else 1.0 / (hours * 3600.0)
 
 
-def station_cells(city, domain):
+def station_cells(city, domain):          
     st = pd.read_csv(config.processed_dir(city) / f"{city}_pm25_stations.csv")
     st = st[st["in_domain"]].reset_index(drop=True)
     dx = domain.attrs["cell_size_m"]
@@ -44,7 +47,8 @@ def station_cells(city, domain):
     return st
 
 
-def simulate_days(city, domain, days, stations, offseth, kgrid):
+def simulate_days(city, domain, days, stations, offseth, kgrid):    #for every calibration day, runs the model once with "1 µg/s per person" emissions 
+                                                                    #and once with "1 µg/m³" background, for every loss rate, and records what each station would measure each hour.
     """Station hour-means for every (day, K, tracer). Shape (D, nK, 24, ntr, nst)."""
     dx = domain.attrs["cell_size_m"]
     pop = domain["population"].values
@@ -87,7 +91,7 @@ def observations(city, days, stations):
     return y
 
 
-def fit(sime, simb, y, alpha=None):
+def fit(sime, simb, y, alpha=None):    # finds per person emission alpha and background per day value that best matches station readings
     D = y.shape[0]
     ok = np.isfinite(y)
     rowsday = np.broadcast_to(np.arange(D)[:, None, None], y.shape)[ok]
@@ -120,7 +124,8 @@ def scores(y, pred, withinday=True):
     return out
 
 
-def calibrate(city, kgrid):
+def calibrate(city, kgrid):     # tries each loss rate on 2021–2024, keeps the best, freezes alpha and checks 2025
+                                # confirms the model beats background-only, then saves the calibration and daily backgrounds
     print(f"=== {city}")
     cfg = config.city_config(city)
     domain = xr.open_dataset(config.processed_dir(city) / f"{city}_domain.nc")
@@ -195,7 +200,7 @@ def calibrate(city, kgrid):
     print(json.dumps({k: v for k, v in result.items() if k != "stations"}, indent=2))
 
 
-def plot(city, y, istrain, predtr, predte, nullte, stations, out):
+def plot(city, y, istrain, predtr, predte, nullte, stations, out):    # draws observed vs model scatter plots for training days, test days, and background-only benchmark
     fig, axes = plt.subplots(1, 3, figsize=(15, 4.6))
     for ax, yy, pp, title in [
         (axes[0], y[istrain], predtr, "train (2021-24)"),
