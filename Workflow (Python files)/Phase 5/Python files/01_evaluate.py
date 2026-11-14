@@ -1,3 +1,7 @@
+"""
+scores all networks on 2025 (test) maps: main experiment
+comparisons run at each city's own network size, equal sensor count, and equal sensor density
+"""
 import argparse
 import importlib.util
 import json
@@ -38,7 +42,7 @@ def city_dirs(city):
     return d, f
 
 
-def bootstrap_index(meta, nboot, seed):
+def bootstrap_index(meta, nboot, seed):       # repeats comparison choosing days with replacement 2000 times to give 2000 unique testing sets for CIs
     """Stratified day bootstrap -> list of map-index arrays."""
     rng = np.random.default_rng(seed)
     regimedays = {r: g["day"].unique() for r, g in meta.groupby("regime")}
@@ -53,14 +57,15 @@ def bootstrap_index(meta, nboot, seed):
     return out
 
 
-def weighted_rmse(mse, w, idx=None):
+def weighted_rmse(mse, w, idx=None): 
     if idx is None:
         return float(np.sqrt(np.sum(w * mse)))
     ww = w[idx]
     return float(np.sqrt(np.sum(ww * mse[idx]) / ww.sum()))
 
 
-def evaluate(city):
+def evaluate(city):     # scores every network (all strategies, N and noise levels) on the test maps, plus 200 random networks. 
+                        # computes improvement = 1 − greedy/k-means with bootstrap CIs, per-type results, and how many even-spread sensors equal greedy's 22 or 8.
     print(f"=== {city}")
     datadir, figdir = city_dirs(city)
     maps = (N.load_maps(city, TESTSET, "all", k_tag=K_TAG) if K_TAG
@@ -137,7 +142,7 @@ def improvement_draws(res, label, n):
     return np.array([1 - weighted_rmse(g, w, i) / weighted_rmse(k, w, i) for i in res["boots"]])
 
 
-def compare(sg, mel):
+def compare(sg, mel): 
     """Melbourne minus Singapore improvement, with CIs (independent bootstraps)."""
     pairs = {
         "own_network_size": (cfg.MAIN_N["singapore"], cfg.MAIN_N["melbourne"]),
@@ -166,7 +171,7 @@ BANDS = {"singapore": [(5, 10), (11, 20), (21, 40)],
          "melbourne": [(5, 10), (11, 20), (21, 40), (41, 80), (81, 160)]}
 
 
-def band_means(city, res):
+def band_means(city, res):    # average improvement over each band of N values with CIs
     out = {}
     for lo, hi in BANDS[city]:
         draws = np.mean([improvement_draws(res, HEADLINE, n) for n in range(lo, hi + 1)], axis=0)
@@ -176,7 +181,7 @@ def band_means(city, res):
     return out
 
 
-def plot(city, scores, imp, figdir):
+def plot(city, scores, imp, figdir):  # plots error against N for each strategy and improvement within CI 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4.2))
     ax = axes[0]
     for strat, style in [("greedy", "-"), ("kmeans", "-"), ("qr", "--"), ("random_mean", ":")]:
